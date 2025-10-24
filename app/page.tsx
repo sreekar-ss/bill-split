@@ -1,3 +1,5 @@
+'use client';
+
 import Link from 'next/link';
 import { 
   Box, 
@@ -74,43 +76,45 @@ export default function Home() {
               The modern way to manage shared costs.
             </Typography>
             <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
-              <Button
-                component={Link}
-                href="/register"
-                variant="contained"
-                size="large"
-                sx={{
-                  bgcolor: 'white',
-                  color: 'primary.main',
-                  px: 4,
-                  py: 1.5,
-                  fontSize: '1.1rem',
-                  '&:hover': {
-                    bgcolor: 'grey.100',
-                  },
-                }}
-              >
-                Get Started Free
-              </Button>
-              <Button
-                component={Link}
-                href="/login"
-                variant="outlined"
-                size="large"
-                sx={{
-                  borderColor: 'white',
-                  color: 'white',
-                  px: 4,
-                  py: 1.5,
-                  fontSize: '1.1rem',
-                  '&:hover': {
+              <Link href="/register" style={{ textDecoration: 'none' }}>
+                <Button
+                  variant="contained"
+                  size="large"
+                  fullWidth
+                  sx={{
+                    bgcolor: 'white',
+                    color: 'primary.main',
+                    px: 4,
+                    py: 1.5,
+                    fontSize: '1.1rem',
+                    '&:hover': {
+                      bgcolor: 'grey.100',
+                    },
+                  }}
+                >
+                  Get Started Free
+                </Button>
+              </Link>
+              <Link href="/login" style={{ textDecoration: 'none' }}>
+                <Button
+                  variant="outlined"
+                  size="large"
+                  fullWidth
+                  sx={{
                     borderColor: 'white',
-                    bgcolor: 'rgba(255,255,255,0.1)',
-                  },
-                }}
-              >
-                Sign In
-              </Button>
+                    color: 'white',
+                    px: 4,
+                    py: 1.5,
+                    fontSize: '1.1rem',
+                    '&:hover': {
+                      borderColor: 'white',
+                      bgcolor: 'rgba(255,255,255,0.1)',
+                    },
+                  }}
+                >
+                  Sign In
+                </Button>
+              </Link>
             </Stack>
           </Stack>
         </Container>
@@ -129,7 +133,7 @@ export default function Home() {
         </Typography>
         <Grid container spacing={4}>
           {features.map((feature, index) => (
-            <Grid item xs={12} sm={6} md={4} key={index}>
+            <Grid xs={12} sm={6} md={4} key={index}>
               <Card 
                 sx={{ 
                   height: '100%',
@@ -167,19 +171,19 @@ export default function Home() {
             <Typography variant="h6" color="text.secondary">
               Join thousands of users who split smarter with BillSplit
             </Typography>
-            <Button
-              component={Link}
-              href="/register"
-              variant="contained"
-              size="large"
-              sx={{
-                px: 5,
-                py: 2,
-                fontSize: '1.2rem',
-              }}
-            >
-              Start Splitting Now
-            </Button>
+            <Link href="/register" style={{ textDecoration: 'none' }}>
+              <Button
+                variant="contained"
+                size="large"
+                sx={{
+                  px: 5,
+                  py: 2,
+                  fontSize: '1.2rem',
+                }}
+              >
+                Start Splitting Now
+              </Button>
+            </Link>
           </Stack>
         </Container>
       </Box>

@@ -1,0 +1,268 @@
+// BillSplit Prisma Schema
+// Comprehensive database structure for expense splitting app
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// User model
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  password      String
+  name          String
+  avatar        String?
+  phone         String?
+  defaultCurrency String  @default("USD")
+  emailVerified Boolean   @default(false)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  // Relations
+  groupMemberships  GroupMember[]
+  createdGroups     Group[]       @relation("GroupCreator")
+  createdExpenses   Expense[]     @relation("ExpenseCreator")
+  expenseSplits     ExpenseSplit[]
+  paymentsFrom      Settlement[]  @relation("PaymentFrom")
+  paymentsTo        Settlement[]  @relation("PaymentTo")
+  notifications     Notification[]
+  friends           Friendship[]  @relation("UserFriends")
+  friendOf          Friendship[]  @relation("FriendOf")
+  comments          Comment[]
+
+  @@index([email])
+}
+
+// Group model
+model Group {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  icon        String?
+  category    String?  @default("general")
+  currency    String   @default("USD")
+  createdById String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  createdBy User         @relation("GroupCreator", fields: [createdById], references: [id])
+  members   GroupMember[]
+  expenses  Expense[]
+  settlements Settlement[]
+  activities Activity[]
+
+  @@index([createdById])
+}
+
+// Group membership
+model GroupMember {
+  id        String   @id @default(cuid())
+  groupId   String
+  userId    String
+  role      String   @default("member") // admin, member
+  joinedAt  DateTime @default(now())
+
+  // Relations
+  group Group @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([groupId, userId])
+  @@index([groupId])
+  @@index([userId])
+}
+
+// Expense model
+model Expense {
+  id          String   @id @default(cuid())
+  amount      Float
+  description String
+  category    String   @default("general")
+  date        DateTime @default(now())
+  currency    String   @default("USD")
+  splitMethod String   @default("equal") // equal, percentage, exact, itemized
+  notes       String?
+  groupId     String
+  createdById String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  group     Group          @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  createdBy User           @relation("ExpenseCreator", fields: [createdById], references: [id])
+  splits    ExpenseSplit[]
+  receipts  Receipt[]
+  items     ExpenseItem[]
+  comments  Comment[]
+  activities Activity[]
+
+  @@index([groupId])
+  @@index([createdById])
+  @@index([date])
+}
+
+// Expense split - who owes what
+model ExpenseSplit {
+  id         String   @id @default(cuid())
+  expenseId  String
+  userId     String
+  amount     Float
+  percentage Float?
+  paidAmount Float    @default(0)
+  settled    Boolean  @default(false)
+  createdAt  DateTime @default(now())
+
+  // Relations
+  expense Expense @relation(fields: [expenseId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([expenseId])
+  @@index([userId])
+  @@index([settled])
+}
+
+// Itemized expense items (for detailed splitting)
+model ExpenseItem {
+  id          String   @id @default(cuid())
+  expenseId   String
+  name        String
+  quantity    Int      @default(1)
+  price       Float
+  sharedBy    String[] // Array of user IDs
+  createdAt   DateTime @default(now())
+
+  // Relations
+  expense Expense @relation(fields: [expenseId], references: [id], onDelete: Cascade)
+
+  @@index([expenseId])
+}
+
+// Receipt images
+model Receipt {
+  id         String   @id @default(cuid())
+  expenseId  String
+  imageUrl   String
+  fileName   String?
+  ocrData    Json?    // Store OCR extracted data
+  uploadedAt DateTime @default(now())
+
+  // Relations
+  expense Expense @relation(fields: [expenseId], references: [id], onDelete: Cascade)
+
+  @@index([expenseId])
+}
+
+// Settlement payments
+model Settlement {
+  id          String   @id @default(cuid())
+  amount      Float
+  currency    String   @default("USD")
+  fromUserId  String
+  toUserId    String
+  groupId     String?
+  note        String?
+  paymentMethod String? // cash, paypal, venmo, stripe, etc.
+  settled     Boolean  @default(true)
+  settledAt   DateTime @default(now())
+  createdAt   DateTime @default(now())
+
+  // Relations
+  fromUser User   @relation("PaymentFrom", fields: [fromUserId], references: [id])
+  toUser   User   @relation("PaymentTo", fields: [toUserId], references: [id])
+  group    Group? @relation(fields: [groupId], references: [id], onDelete: SetNull)
+  activities Activity[]
+
+  @@index([fromUserId])
+  @@index([toUserId])
+  @@index([groupId])
+}
+
+// Category definitions
+model Category {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  icon        String
+  color       String
+  type        String   @default("expense") // expense, group
+  isDefault   Boolean  @default(false)
+  createdAt   DateTime @default(now())
+}
+
+// Friendship/contacts
+model Friendship {
+  id         String   @id @default(cuid())
+  userId     String
+  friendId   String
+  status     String   @default("pending") // pending, accepted, rejected
+  createdAt  DateTime @default(now())
+  acceptedAt DateTime?
+
+  // Relations
+  user   User @relation("UserFriends", fields: [userId], references: [id], onDelete: Cascade)
+  friend User @relation("FriendOf", fields: [friendId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, friendId])
+  @@index([userId])
+  @@index([friendId])
+}
+
+// Notifications
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  type      String   // expense_added, payment_received, group_invite, etc.
+  title     String
+  message   String
+  data      Json?    // Additional data
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([read])
+  @@index([createdAt])
+}
+
+// Activity feed
+model Activity {
+  id          String   @id @default(cuid())
+  groupId     String
+  type        String   // expense_created, expense_updated, settlement_made, etc.
+  description String
+  metadata    Json?
+  expenseId   String?
+  settlementId String?
+  createdAt   DateTime @default(now())
+
+  // Relations
+  group      Group       @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  expense    Expense?    @relation(fields: [expenseId], references: [id], onDelete: Cascade)
+  settlement Settlement? @relation(fields: [settlementId], references: [id], onDelete: Cascade)
+
+  @@index([groupId])
+  @@index([createdAt])
+}
+
+// Comments on expenses
+model Comment {
+  id        String   @id @default(cuid())
+  expenseId String
+  userId    String
+  text      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  expense Expense @relation(fields: [expenseId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([expenseId])
+  @@index([userId])
+}

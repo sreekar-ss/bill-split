@@ -97,6 +97,7 @@ export async function GET(
             },
           },
         },
+        items: true,
       },
       orderBy: {
         date: 'desc',

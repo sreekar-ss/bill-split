@@ -22,6 +22,9 @@ import {
   TextField,
   Alert,
   Chip,
+  Menu,
+  MenuItem,
+  ListItemIcon,
 } from '@mui/material';
 import {
   ArrowBack,
@@ -29,9 +32,14 @@ import {
   Receipt,
   CheckCircle,
   AccountBalanceWallet,
+  Edit,
+  DeleteOutline,
+  MoreVert,
 } from '@mui/icons-material';
 import { formatCurrency, formatDate, simplifyDebts, formatSplitMethod } from '@/lib/utils';
+import { expensesApi } from '@/lib/api';
 import AddExpenseDialog from '@/app/components/AddExpenseDialog';
+import EditExpenseDialog from '@/app/components/EditExpenseDialog';
 
 export default function FriendDetailPage() {
   const router = useRouter();
@@ -43,7 +51,14 @@ export default function FriendDetailPage() {
   const [expenses, setExpenses] = useState<any[]>([]);
   const [settlements, setSettlements] = useState<any[]>([]);
   const [addExpenseDialogOpen, setAddExpenseDialogOpen] = useState(false);
+  const [editExpenseDialogOpen, setEditExpenseDialogOpen] = useState(false);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [selectedExpense, setSelectedExpense] = useState<any>(null);
   const [currentUser, setCurrentUser] = useState<any>(null);
+  const [menuAnchor, setMenuAnchor] = useState<null | HTMLElement>(null);
+  const [menuExpense, setMenuExpense] = useState<any>(null);
+  const [error, setError] = useState('');
+  const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
     const token = localStorage.getItem('token');
@@ -109,6 +124,50 @@ export default function FriendDetailPage() {
     }
 
     loadFriend();
+  };
+
+  const handleEditExpense = async (expenseId: string, data: any) => {
+    await expensesApi.update(expenseId, data);
+    loadFriend();
+  };
+
+  const handleDeleteExpense = async () => {
+    if (!selectedExpense) return;
+    setSubmitting(true);
+    setError('');
+
+    try {
+      await expensesApi.delete(selectedExpense.id);
+      setDeleteConfirmOpen(false);
+      setSelectedExpense(null);
+      loadFriend();
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleMenuOpen = (event: React.MouseEvent<HTMLElement>, expense: any) => {
+    setMenuAnchor(event.currentTarget);
+    setMenuExpense(expense);
+  };
+
+  const handleMenuClose = () => {
+    setMenuAnchor(null);
+    setMenuExpense(null);
+  };
+
+  const handleEditClick = () => {
+    setSelectedExpense(menuExpense);
+    setEditExpenseDialogOpen(true);
+    handleMenuClose();
+  };
+
+  const handleDeleteClick = () => {
+    setSelectedExpense(menuExpense);
+    setDeleteConfirmOpen(true);
+    handleMenuClose();
   };
 
   // Calculate balance
@@ -278,9 +337,19 @@ export default function FriendDetailPage() {
                             <Chip label={formatSplitMethod(item.splitMethod)} size="small" variant="outlined" />
                           </Stack>
                         </Box>
-                        <Typography variant="h5" fontWeight={700} color="primary.main">
-                          {formatCurrency(item.amount)}
-                        </Typography>
+                        <Stack direction="row" alignItems="center" spacing={1}>
+                          <Typography variant="h5" fontWeight={700} color="primary.main">
+                            {formatCurrency(item.amount)}
+                          </Typography>
+                          {item.createdById === currentUser?.id && (
+                            <IconButton
+                              size="small"
+                              onClick={(e) => handleMenuOpen(e, item)}
+                            >
+                              <MoreVert />
+                            </IconButton>
+                          )}
+                        </Stack>
                       </Stack>
                     </CardContent>
                   </Card>
@@ -324,6 +393,59 @@ export default function FriendDetailPage() {
           friendId={friendId}
         />
       )}
+
+      {/* Expense Actions Menu */}
+      <Menu
+        anchorEl={menuAnchor}
+        open={Boolean(menuAnchor)}
+        onClose={handleMenuClose}
+      >
+        <MenuItem onClick={handleEditClick}>
+          <ListItemIcon>
+            <Edit fontSize="small" />
+          </ListItemIcon>
+          Edit
+        </MenuItem>
+        <MenuItem onClick={handleDeleteClick}>
+          <ListItemIcon>
+            <DeleteOutline fontSize="small" color="error" />
+          </ListItemIcon>
+          <Typography color="error">Delete</Typography>
+        </MenuItem>
+      </Menu>
+
+      {/* Edit Expense Dialog */}
+      {selectedExpense && currentUser && friend && (
+        <EditExpenseDialog
+          open={editExpenseDialogOpen}
+          onClose={() => setEditExpenseDialogOpen(false)}
+          members={[
+            { userId: currentUser.id, name: currentUser.name },
+            { userId: friend.id, name: friend.name },
+          ]}
+          expense={selectedExpense}
+          onSubmit={handleEditExpense}
+        />
+      )}
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={deleteConfirmOpen} onClose={() => setDeleteConfirmOpen(false)} maxWidth="sm">
+        <DialogTitle>Delete Expense?</DialogTitle>
+        <DialogContent>
+          {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
+          <Typography>
+            Are you sure you want to delete &ldquo;{selectedExpense?.description}&rdquo;? This action cannot be undone.
+          </Typography>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2 }}>
+          <Button onClick={() => setDeleteConfirmOpen(false)} disabled={submitting}>
+            Cancel
+          </Button>
+          <Button onClick={handleDeleteExpense} variant="contained" color="error" disabled={submitting}>
+            {submitting ? 'Deleting...' : 'Delete'}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 }

@@ -2,23 +2,49 @@
 
 ## 🎉 Completed Features
 
+### Core Authentication & User Management
 - ✅ User registration and authentication (JWT)
 - ✅ Login/logout functionality
+- ✅ Protected routes and API endpoints
+- ✅ Password hashing with bcrypt
+
+### Group Management
 - ✅ Dashboard with groups overview
 - ✅ Create groups
 - ✅ Add members to groups (by email)
+- ✅ Group detail page with members and activity
+- ✅ Group expense tracking
+
+### Expense & Settlement
 - ✅ Add expenses to groups
 - ✅ Equal split calculation
 - ✅ Balance calculation (who owes whom)
-- ✅ Group detail page with expenses list
+- ✅ **Smart debt simplification algorithm** - Minimizes number of transactions
+- ✅ **Settle up functionality** - Mark debts as paid between members
+- ✅ **Settlement history** - Track settlements in activity timeline
+- ✅ Activity timeline (expenses + settlements merged)
+
+### Friend System
+- ✅ **Friend system** - Add friends by email
+- ✅ **Friends dashboard** - View all friends and their balances
+- ✅ **Friend-to-friend expenses** - Add expenses directly with friends (no group needed)
+- ✅ **Friend expense details** - View individual friend's expense history
+- ✅ Friendship status tracking (pending, accepted)
+
+### Technical Infrastructure
 - ✅ PostgreSQL database with Prisma ORM
-- ✅ Material-UI responsive design
+- ✅ Material-UI v6 responsive design
+- ✅ Next.js 15 (App Router) full-stack architecture
+- ✅ TypeScript throughout
+- ✅ Docker PostgreSQL setup
+- ✅ Database migrations with Prisma
 
 ---
 
 ## 🔥 High Priority (Next Phase)
 
-### Authentication & UX
+### Bug Fixes & UX
+- [ ] 🐛 **Friends button not visible on mobile** - Add mobile navigation for friends feature
 - [ ] **Cross-tab authentication sync** - When user logs in/out in one tab, sync all other tabs automatically (use Storage Events or Broadcast Channel API)
 - [ ] Profile page - Edit user profile, avatar upload, change password
 - [ ] Forgot password functionality
@@ -33,12 +59,11 @@
 - [ ] Expense categories (food, rent, travel, utilities, etc.)
 - [ ] Multiple currencies with conversion
 
-### Settlement
-- [ ] **Settle up** - Mark debts as paid
-- [ ] Settlement history
+### Settlement Enhancements
 - [ ] Payment method tracking (cash, Venmo, PayPal, etc.)
 - [ ] Payment integration (Stripe, PayPal)
 - [ ] Payment reminders
+- [ ] Settle up for friend expenses (currently only group expenses)
 
 ---
 
@@ -63,11 +88,12 @@
 - [ ] Group categories
 
 ### Social Features
-- [ ] Activity feed (who added what)
 - [ ] Comments on expenses
 - [ ] Notifications (in-app, email, push)
-- [ ] Friend system (add friends for easier group creation)
 - [ ] User search
+- [ ] Friend requests (accept/reject)
+- [ ] Friend removal
+- [ ] Friend status indicators
 
 ---
 
@@ -75,10 +101,11 @@
 
 ### Advanced Features
 - [ ] **Recurring expenses** - Weekly rent, monthly subscriptions
-- [ ] **Smart settlement algorithm** - Minimize number of transactions (implement debt simplification)
 - [ ] Split by shares (1:2:3 ratio splits)
 - [ ] Tax and tip calculator
 - [ ] Multi-group view (see all balances across groups)
+- [ ] Expense templates (save common expense patterns)
+- [ ] Bulk expense import (CSV)
 
 ### Real-time Features
 - [ ] WebSocket integration (Socket.io)
@@ -126,15 +153,16 @@
 
 ## 🎨 UI/UX Improvements
 
+- [ ] 🐛 **Mobile navigation menu** - Add hamburger menu or bottom nav for Friends on mobile
 - [ ] Dark mode toggle
 - [ ] Custom color themes
-- [ ] Better mobile navigation
 - [ ] Skeleton loaders for better perceived performance
 - [ ] Toast notifications (success/error feedback)
 - [ ] Empty states with illustrations
 - [ ] Onboarding tutorial for new users
 - [ ] Keyboard shortcuts
 - [ ] Accessibility improvements (ARIA labels, screen reader support)
+- [ ] Better responsive layouts for all pages
 
 ---
 
@@ -195,20 +223,30 @@
 
 ## 📅 Version History
 
-### v0.1.0 - MVP (Current)
+### v0.1.0 - MVP ✅ (Completed)
 - Basic authentication
 - Group creation and management
 - Expense tracking with equal split
 - Balance calculation
 
-### v0.2.0 - Planned
+### v0.2.0 - Current 🚀
+- ✅ Smart debt simplification algorithm
+- ✅ Settle up functionality
+- ✅ Settlement history tracking
+- ✅ Friend system (add, view, manage friends)
+- ✅ Friend-to-friend expenses (direct expenses without groups)
+- ✅ Friends dashboard with balances
+- 🔄 Mobile navigation improvements (in progress)
+
+### v0.3.0 - Planned
 - Cross-tab auth sync
 - Profile management
-- Receipt upload
-- Unequal splits
-- Settlement functionality
+- Receipt upload & OCR
+- Unequal splits (percentage/exact amounts)
+- Expense editing/deletion
+- Payment method tracking
 
 ---
 
-**Last Updated:** October 24, 2025
+**Last Updated:** October 25, 2025
 

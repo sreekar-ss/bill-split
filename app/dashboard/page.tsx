@@ -30,6 +30,7 @@ import {
   Receipt,
   Logout,
   Add,
+  Group,
 } from '@mui/icons-material';
 import { groupsApi } from '@/lib/api';
 
@@ -156,6 +157,14 @@ export default function DashboardPage() {
             >
               Friends
             </Button>
+            <IconButton
+              color="inherit"
+              onClick={() => router.push('/friends')}
+              sx={{ display: { xs: 'flex', sm: 'none' } }}
+              title="Friends"
+            >
+              <Group />
+            </IconButton>
             <Typography variant="body2" sx={{ display: { xs: 'none', sm: 'block' } }}>
               {user?.email}
             </Typography>

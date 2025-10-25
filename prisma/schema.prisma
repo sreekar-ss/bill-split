@@ -87,13 +87,13 @@ model Expense {
   currency    String   @default("USD")
   splitMethod String   @default("equal") // equal, percentage, exact, itemized
   notes       String?
-  groupId     String
+  groupId     String?  // Optional - null for friend expenses
   createdById String
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
   // Relations
-  group     Group          @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  group     Group?         @relation(fields: [groupId], references: [id], onDelete: Cascade)
   createdBy User           @relation("ExpenseCreator", fields: [createdById], references: [id])
   splits    ExpenseSplit[]
   receipts  Receipt[]

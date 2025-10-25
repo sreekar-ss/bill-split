@@ -149,7 +149,16 @@ export default function DashboardPage() {
             BillSplit
           </Typography>
           <Stack direction="row" spacing={2} alignItems="center">
-            <Typography variant="body2">{user?.email}</Typography>
+            <Button
+              color="inherit"
+              onClick={() => router.push('/friends')}
+              sx={{ display: { xs: 'none', sm: 'flex' } }}
+            >
+              Friends
+            </Button>
+            <Typography variant="body2" sx={{ display: { xs: 'none', sm: 'block' } }}>
+              {user?.email}
+            </Typography>
             <Avatar sx={{ width: 32, height: 32, bgcolor: 'secondary.main' }}>
               {user?.name?.[0]?.toUpperCase()}
             </Avatar>

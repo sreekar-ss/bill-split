@@ -17,12 +17,19 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { groupId, amount, description, category, date } = body;
+    const { groupId, friendId, amount, description, category, date } = body;
 
     // Validation
-    if (!groupId || !amount || !description) {
+    if (!amount || !description) {
       return NextResponse.json(
-        { error: 'Group ID, amount, and description are required' },
+        { error: 'Amount and description are required' },
+        { status: 400 }
+      );
+    }
+
+    if (!groupId && !friendId) {
+      return NextResponse.json(
+        { error: 'Either groupId or friendId is required' },
         { status: 400 }
       );
     }
@@ -31,23 +38,44 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Amount must be greater than 0' }, { status: 400 });
     }
 
-    // Check if user is a member of the group
-    const groupMember = await prisma.groupMember.findFirst({
-      where: {
-        groupId,
-        userId: payload.userId,
-      },
-    });
+    let members: { userId: string }[] = [];
 
-    if (!groupMember) {
-      return NextResponse.json({ error: 'Not a member of this group' }, { status: 403 });
+    if (groupId) {
+      // Group expense - check membership
+      const groupMember = await prisma.groupMember.findFirst({
+        where: {
+          groupId,
+          userId: payload.userId,
+        },
+      });
+
+      if (!groupMember) {
+        return NextResponse.json({ error: 'Not a member of this group' }, { status: 403 });
+      }
+
+      // Get all members of the group
+      members = await prisma.groupMember.findMany({
+        where: { groupId },
+        select: { userId: true },
+      });
+    } else if (friendId) {
+      // Friend expense - check friendship
+      const friendship = await prisma.friendship.findFirst({
+        where: {
+          OR: [
+            { userId: payload.userId, friendId, status: 'accepted' },
+            { userId: friendId, friendId: payload.userId, status: 'accepted' },
+          ],
+        },
+      });
+
+      if (!friendship) {
+        return NextResponse.json({ error: 'Not friends with this user' }, { status: 403 });
+      }
+
+      // Just the two friends
+      members = [{ userId: payload.userId }, { userId: friendId }];
     }
-
-    // Get all members of the group
-    const members = await prisma.groupMember.findMany({
-      where: { groupId },
-      select: { userId: true },
-    });
 
     // Calculate split amount (equal split)
     const splitAmount = amount / members.length;
@@ -61,7 +89,7 @@ export async function POST(request: NextRequest) {
           description: description.trim(),
           category: category || 'general',
           date: date ? new Date(date) : new Date(),
-          groupId,
+          groupId: groupId || null,
           createdById: payload.userId,
           splitMethod: 'equal',
           // Create splits for all members

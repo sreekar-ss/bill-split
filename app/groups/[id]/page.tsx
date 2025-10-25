@@ -34,6 +34,7 @@ import {
   PersonAdd,
   Receipt,
   AccountBalanceWallet,
+  CheckCircle,
 } from '@mui/icons-material';
 import { groupsApi, expensesApi } from '@/lib/api';
 import { formatCurrency, formatDate, simplifyDebts } from '@/lib/utils';
@@ -52,6 +53,8 @@ export default function GroupDetailPage() {
   const [expenseAmount, setExpenseAmount] = useState('');
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [settleDialogOpen, setSettleDialogOpen] = useState(false);
+  const [settlementData, setSettlementData] = useState<{ from: string; to: string; amount: number } | null>(null);
 
   useEffect(() => {
     const token = localStorage.getItem('token');
@@ -121,6 +124,48 @@ export default function GroupDetailPage() {
       setExpenseDescription('');
       setExpenseAmount('');
       loadGroup();
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleSettleUp = (balance: { from: string; to: string; amount: number }) => {
+    setSettlementData(balance);
+    setSettleDialogOpen(true);
+  };
+
+  const confirmSettlement = async () => {
+    if (!settlementData) return;
+
+    setSubmitting(true);
+    setError('');
+
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch('/api/settlements', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          groupId,
+          fromUserName: settlementData.from,
+          toUserName: settlementData.to,
+          amount: settlementData.amount,
+        }),
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || 'Failed to record settlement');
+      }
+
+      setSettleDialogOpen(false);
+      setSettlementData(null);
+      loadGroup(); // Reload to show updated balances
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -250,7 +295,20 @@ export default function GroupDetailPage() {
               </Stack>
               <List dense>
                 {balances.map((balance, index) => (
-                  <ListItem key={index}>
+                  <ListItem
+                    key={index}
+                    secondaryAction={
+                      <Button
+                        variant="contained"
+                        size="small"
+                        color="success"
+                        startIcon={<CheckCircle />}
+                        onClick={() => handleSettleUp(balance)}
+                      >
+                        Settle Up
+                      </Button>
+                    }
+                  >
                     <ListItemText
                       primary={
                         <Typography>
@@ -412,6 +470,39 @@ export default function GroupDetailPage() {
           </Button>
           <Button onClick={handleAddExpense} variant="contained" disabled={submitting}>
             {submitting ? 'Adding...' : 'Add Expense'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Settle Up Dialog */}
+      <Dialog open={settleDialogOpen} onClose={() => setSettleDialogOpen(false)} maxWidth="sm" fullWidth>
+        <DialogTitle>Confirm Settlement</DialogTitle>
+        <DialogContent>
+          {error && (
+            <Alert severity="error" sx={{ mb: 2 }}>
+              {error}
+            </Alert>
+          )}
+          {settlementData && (
+            <Box sx={{ py: 2 }}>
+              <Typography variant="body1" gutterBottom>
+                Record that <strong>{settlementData.from}</strong> has paid <strong>{settlementData.to}</strong>:
+              </Typography>
+              <Typography variant="h4" color="success.main" sx={{ my: 2, textAlign: 'center' }}>
+                {formatCurrency(settlementData.amount)}
+              </Typography>
+              <Alert severity="info" sx={{ mt: 2 }}>
+                This will mark the related expenses as settled and remove this balance.
+              </Alert>
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2 }}>
+          <Button onClick={() => setSettleDialogOpen(false)} disabled={submitting}>
+            Cancel
+          </Button>
+          <Button onClick={confirmSettlement} variant="contained" color="success" disabled={submitting}>
+            {submitting ? 'Recording...' : 'Confirm Settlement'}
           </Button>
         </DialogActions>
       </Dialog>

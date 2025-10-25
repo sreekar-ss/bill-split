@@ -17,7 +17,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { groupId, friendId, amount, description, category, date } = body;
+    const { groupId, friendId, amount, description, category, date, splitMethod, customSplits, items } = body;
 
     // Validation
     if (!amount || !description) {
@@ -36,6 +36,11 @@ export async function POST(request: NextRequest) {
 
     if (amount <= 0) {
       return NextResponse.json({ error: 'Amount must be greater than 0' }, { status: 400 });
+    }
+
+    const method = splitMethod || 'equal';
+    if (!['equal', 'percentage', 'exact', 'itemized'].includes(method)) {
+      return NextResponse.json({ error: 'Invalid split method' }, { status: 400 });
     }
 
     let members: { userId: string }[] = [];
@@ -77,8 +82,48 @@ export async function POST(request: NextRequest) {
       members = [{ userId: payload.userId }, { userId: friendId }];
     }
 
-    // Calculate split amount (equal split)
-    const splitAmount = amount / members.length;
+    // Calculate splits based on method
+    let splits: Array<{ userId: string; amount: number; percentage?: number }> = [];
+
+    if (method === 'equal') {
+      const splitAmount = amount / members.length;
+      splits = members.map((m) => ({ userId: m.userId, amount: splitAmount }));
+    } else if (method === 'percentage') {
+      if (!customSplits || !Array.isArray(customSplits)) {
+        return NextResponse.json({ error: 'Custom splits required for percentage method' }, { status: 400 });
+      }
+      const totalPercentage = customSplits.reduce((sum: number, s: any) => sum + (s.percentage || 0), 0);
+      if (Math.abs(totalPercentage - 100) > 0.01) {
+        return NextResponse.json({ error: 'Percentages must sum to 100' }, { status: 400 });
+      }
+      splits = customSplits.map((s: any) => ({
+        userId: s.userId,
+        amount: (amount * s.percentage) / 100,
+        percentage: s.percentage,
+      }));
+    } else if (method === 'exact') {
+      if (!customSplits || !Array.isArray(customSplits)) {
+        return NextResponse.json({ error: 'Custom splits required for exact method' }, { status: 400 });
+      }
+      const totalAmount = customSplits.reduce((sum: number, s: any) => sum + (s.amount || 0), 0);
+      if (Math.abs(totalAmount - amount) > 0.01) {
+        return NextResponse.json({ error: 'Split amounts must equal total' }, { status: 400 });
+      }
+      splits = customSplits.map((s: any) => ({ userId: s.userId, amount: s.amount }));
+    } else if (method === 'itemized') {
+      if (!items || !Array.isArray(items)) {
+        return NextResponse.json({ error: 'Items required for itemized method' }, { status: 400 });
+      }
+      const userAmounts: Record<string, number> = {};
+      items.forEach((item: any) => {
+        const sharedBy = item.sharedBy || [];
+        const itemAmount = item.amount / sharedBy.length;
+        sharedBy.forEach((userId: string) => {
+          userAmounts[userId] = (userAmounts[userId] || 0) + itemAmount;
+        });
+      });
+      splits = Object.entries(userAmounts).map(([userId, amount]) => ({ userId, amount }));
+    }
 
     // Create expense with splits in a transaction
     const expense = await prisma.$transaction(async (tx) => {
@@ -91,17 +136,27 @@ export async function POST(request: NextRequest) {
           date: date ? new Date(date) : new Date(),
           groupId: groupId || null,
           createdById: payload.userId,
-          splitMethod: 'equal',
-          // Create splits for all members
+          splitMethod: method,
+          // Create splits
           splits: {
-            create: members.map((member) => ({
-              userId: member.userId,
-              amount: splitAmount,
-              // The person who paid doesn't owe themselves
-              paidAmount: member.userId === payload.userId ? splitAmount : 0,
-              settled: member.userId === payload.userId,
+            create: splits.map((split) => ({
+              userId: split.userId,
+              amount: split.amount,
+              percentage: split.percentage,
+              paidAmount: split.userId === payload.userId ? split.amount : 0,
+              settled: split.userId === payload.userId,
             })),
           },
+          // Create items if itemized
+          ...(method === 'itemized' && items ? {
+            items: {
+              create: items.map((item: any) => ({
+                name: item.name,
+                amount: item.amount,
+                sharedBy: item.sharedBy,
+              })),
+            },
+          } : {}),
         },
         include: {
           createdBy: {

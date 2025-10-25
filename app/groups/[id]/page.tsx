@@ -38,6 +38,7 @@ import {
 } from '@mui/icons-material';
 import { groupsApi, expensesApi } from '@/lib/api';
 import { formatCurrency, formatDate, simplifyDebts } from '@/lib/utils';
+import AddExpenseDialog from '@/app/components/AddExpenseDialog';
 
 export default function GroupDetailPage() {
   const router = useRouter();
@@ -50,8 +51,6 @@ export default function GroupDetailPage() {
   const [addMemberDialogOpen, setAddMemberDialogOpen] = useState(false);
   const [addExpenseDialogOpen, setAddExpenseDialogOpen] = useState(false);
   const [memberEmail, setMemberEmail] = useState('');
-  const [expenseDescription, setExpenseDescription] = useState('');
-  const [expenseAmount, setExpenseAmount] = useState('');
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [settleDialogOpen, setSettleDialogOpen] = useState(false);
@@ -101,36 +100,9 @@ export default function GroupDetailPage() {
     }
   };
 
-  const handleAddExpense = async () => {
-    if (!expenseDescription.trim() || !expenseAmount) {
-      setError('Description and amount are required');
-      return;
-    }
-
-    const amount = parseFloat(expenseAmount);
-    if (isNaN(amount) || amount <= 0) {
-      setError('Please enter a valid amount');
-      return;
-    }
-
-    setSubmitting(true);
-    setError('');
-
-    try {
-      await expensesApi.create({
-        groupId,
-        description: expenseDescription,
-        amount,
-      });
-      setAddExpenseDialogOpen(false);
-      setExpenseDescription('');
-      setExpenseAmount('');
-      loadGroup();
-    } catch (err: any) {
-      setError(err.message);
-    } finally {
-      setSubmitting(false);
-    }
+  const handleAddExpense = async (expenseData: any) => {
+    await expensesApi.create(expenseData);
+    loadGroup();
   };
 
   const handleSettleUp = (balance: { from: string; to: string; amount: number }) => {
@@ -465,50 +437,13 @@ export default function GroupDetailPage() {
         </DialogActions>
       </Dialog>
 
-      {/* Add Expense Dialog */}
-      <Dialog open={addExpenseDialogOpen} onClose={() => setAddExpenseDialogOpen(false)} maxWidth="sm" fullWidth>
-        <DialogTitle>Add Expense</DialogTitle>
-        <DialogContent>
-          {error && (
-            <Alert severity="error" sx={{ mb: 2 }}>
-              {error}
-            </Alert>
-          )}
-          <TextField
-            autoFocus
-            margin="dense"
-            label="Description"
-            fullWidth
-            required
-            value={expenseDescription}
-            onChange={(e) => setExpenseDescription(e.target.value)}
-            placeholder="e.g., Dinner at restaurant"
-            sx={{ mb: 2 }}
-          />
-          <TextField
-            margin="dense"
-            label="Amount"
-            type="number"
-            fullWidth
-            required
-            value={expenseAmount}
-            onChange={(e) => setExpenseAmount(e.target.value)}
-            placeholder="0.00"
-            inputProps={{ min: 0, step: 0.01 }}
-          />
-          <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
-            This will be split equally among all {group.members.length} members
-          </Typography>
-        </DialogContent>
-        <DialogActions sx={{ px: 3, pb: 2 }}>
-          <Button onClick={() => setAddExpenseDialogOpen(false)} disabled={submitting}>
-            Cancel
-          </Button>
-          <Button onClick={handleAddExpense} variant="contained" disabled={submitting}>
-            {submitting ? 'Adding...' : 'Add Expense'}
-          </Button>
-        </DialogActions>
-      </Dialog>
+      <AddExpenseDialog
+        open={addExpenseDialogOpen}
+        onClose={() => setAddExpenseDialogOpen(false)}
+        members={group.members.map((m: any) => ({ userId: m.user.id, name: m.user.name }))}
+        onSubmit={handleAddExpense}
+        groupId={groupId}
+      />
 
       {/* Settle Up Dialog */}
       <Dialog open={settleDialogOpen} onClose={() => setSettleDialogOpen(false)} maxWidth="sm" fullWidth>

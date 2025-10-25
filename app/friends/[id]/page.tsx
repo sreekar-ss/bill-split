@@ -31,6 +31,7 @@ import {
   AccountBalanceWallet,
 } from '@mui/icons-material';
 import { formatCurrency, formatDate, simplifyDebts } from '@/lib/utils';
+import AddExpenseDialog from '@/app/components/AddExpenseDialog';
 
 export default function FriendDetailPage() {
   const router = useRouter();
@@ -42,14 +43,23 @@ export default function FriendDetailPage() {
   const [expenses, setExpenses] = useState<any[]>([]);
   const [settlements, setSettlements] = useState<any[]>([]);
   const [addExpenseDialogOpen, setAddExpenseDialogOpen] = useState(false);
-  const [expenseDescription, setExpenseDescription] = useState('');
-  const [expenseAmount, setExpenseAmount] = useState('');
-  const [error, setError] = useState('');
-  const [submitting, setSubmitting] = useState(false);
+  const [currentUser, setCurrentUser] = useState<any>(null);
 
   useEffect(() => {
     const token = localStorage.getItem('token');
     if (!token) {
+      router.push('/login');
+      return;
+    }
+
+    try {
+      const payload = JSON.parse(atob(token.split('.')[1]));
+      setCurrentUser({
+        id: payload.userId,
+        name: payload.email.split('@')[0],
+      });
+    } catch (error) {
+      console.error('Invalid token:', error);
       router.push('/login');
       return;
     }
@@ -82,50 +92,23 @@ export default function FriendDetailPage() {
     }
   };
 
-  const handleAddExpense = async () => {
-    if (!expenseDescription.trim() || !expenseAmount) {
-      setError('Description and amount are required');
-      return;
+  const handleAddExpense = async (expenseData: any) => {
+    const token = localStorage.getItem('token');
+    const response = await fetch('/api/expenses', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(expenseData),
+    });
+
+    if (!response.ok) {
+      const data = await response.json();
+      throw new Error(data.error || 'Failed to add expense');
     }
 
-    const amount = parseFloat(expenseAmount);
-    if (isNaN(amount) || amount <= 0) {
-      setError('Please enter a valid amount');
-      return;
-    }
-
-    setSubmitting(true);
-    setError('');
-
-    try {
-      const token = localStorage.getItem('token');
-      const response = await fetch('/api/expenses', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          friendId,
-          description: expenseDescription,
-          amount,
-        }),
-      });
-
-      if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data.error || 'Failed to add expense');
-      }
-
-      setAddExpenseDialogOpen(false);
-      setExpenseDescription('');
-      setExpenseAmount('');
-      loadFriend();
-    } catch (err: any) {
-      setError(err.message);
-    } finally {
-      setSubmitting(false);
-    }
+    loadFriend();
   };
 
   // Calculate balance
@@ -329,50 +312,18 @@ export default function FriendDetailPage() {
         )}
       </Container>
 
-      {/* Add Expense Dialog */}
-      <Dialog open={addExpenseDialogOpen} onClose={() => setAddExpenseDialogOpen(false)} maxWidth="sm" fullWidth>
-        <DialogTitle>Add Expense with {friend.name}</DialogTitle>
-        <DialogContent>
-          {error && (
-            <Alert severity="error" sx={{ mb: 2 }}>
-              {error}
-            </Alert>
-          )}
-          <TextField
-            autoFocus
-            margin="dense"
-            label="Description"
-            fullWidth
-            required
-            value={expenseDescription}
-            onChange={(e) => setExpenseDescription(e.target.value)}
-            placeholder="e.g., Dinner at restaurant"
-            sx={{ mb: 2 }}
-          />
-          <TextField
-            margin="dense"
-            label="Amount"
-            type="number"
-            fullWidth
-            required
-            value={expenseAmount}
-            onChange={(e) => setExpenseAmount(e.target.value)}
-            placeholder="0.00"
-            inputProps={{ min: 0, step: 0.01 }}
-          />
-          <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
-            This will be split equally between you and {friend.name}
-          </Typography>
-        </DialogContent>
-        <DialogActions sx={{ px: 3, pb: 2 }}>
-          <Button onClick={() => setAddExpenseDialogOpen(false)} disabled={submitting}>
-            Cancel
-          </Button>
-          <Button onClick={handleAddExpense} variant="contained" disabled={submitting}>
-            {submitting ? 'Adding...' : 'Add Expense'}
-          </Button>
-        </DialogActions>
-      </Dialog>
+      {currentUser && friend && (
+        <AddExpenseDialog
+          open={addExpenseDialogOpen}
+          onClose={() => setAddExpenseDialogOpen(false)}
+          members={[
+            { userId: currentUser.id, name: currentUser.name },
+            { userId: friend.id, name: friend.name },
+          ]}
+          onSubmit={handleAddExpense}
+          friendId={friendId}
+        />
+      )}
     </Box>
   );
 }

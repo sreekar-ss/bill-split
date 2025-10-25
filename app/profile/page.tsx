@@ -210,7 +210,11 @@ export default function ProfilePage() {
           <CardContent>
             <Stack spacing={3}>
               {/* Profile Header */}
-              <Stack direction="row" spacing={3} alignItems="center">
+              <Stack 
+                direction={{ xs: 'column', sm: 'row' }} 
+                spacing={3} 
+                alignItems={{ xs: 'center', sm: 'center' }}
+              >
                 <Avatar
                   sx={{
                     width: 80,
@@ -221,7 +225,7 @@ export default function ProfilePage() {
                 >
                   {user.name[0]?.toUpperCase()}
                 </Avatar>
-                <Box sx={{ flex: 1 }}>
+                <Box sx={{ flex: 1, textAlign: { xs: 'center', sm: 'left' } }}>
                   <Typography variant="h5" fontWeight={600}>
                     {user.name}
                   </Typography>
@@ -233,6 +237,7 @@ export default function ProfilePage() {
                   variant="outlined"
                   startIcon={<Edit />}
                   onClick={() => setEditDialogOpen(true)}
+                  sx={{ minWidth: 140 }}
                 >
                   Edit Profile
                 </Button>

@@ -55,22 +55,26 @@ export async function GET(
     const expenses = await prisma.expense.findMany({
       where: {
         groupId: null,
-        OR: [
+        AND: [
           {
-            createdById: payload.userId,
-            splits: {
-              some: {
-                userId: friendId,
+            OR: [
+              {
+                createdById: payload.userId,
+                splits: {
+                  some: {
+                    userId: friendId,
+                  },
+                },
               },
-            },
-          },
-          {
-            createdById: friendId,
-            splits: {
-              some: {
-                userId: payload.userId,
+              {
+                createdById: friendId,
+                splits: {
+                  some: {
+                    userId: payload.userId,
+                  },
+                },
               },
-            },
+            ],
           },
         ],
       },
@@ -103,9 +107,13 @@ export async function GET(
     const settlements = await prisma.settlement.findMany({
       where: {
         groupId: null,
-        OR: [
-          { fromUserId: payload.userId, toUserId: friendId },
-          { fromUserId: friendId, toUserId: payload.userId },
+        AND: [
+          {
+            OR: [
+              { fromUserId: payload.userId, toUserId: friendId },
+              { fromUserId: friendId, toUserId: payload.userId },
+            ],
+          },
         ],
       },
       include: {

@@ -63,10 +63,14 @@ export async function GET(request: NextRequest) {
         // Get all expenses where user and friend are involved (no group)
         const expenses = await prisma.expense.findMany({
           where: {
-            groupId: null, // Only friend expenses
-            OR: [
-              { createdById: payload.userId },
-              { createdById: friendId },
+            groupId: null,
+            AND: [
+              {
+                OR: [
+                  { createdById: payload.userId },
+                  { createdById: friendId },
+                ],
+              },
             ],
           },
           include: {
@@ -112,9 +116,13 @@ export async function GET(request: NextRequest) {
     );
 
     return NextResponse.json({ friends: friendsWithBalances });
-  } catch (error) {
+  } catch (error: any) {
     console.error('Get friends error:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    console.error('Error details:', error.message, error.stack);
+    return NextResponse.json({ 
+      error: 'Internal server error',
+      details: error.message 
+    }, { status: 500 });
   }
 }
 

@@ -75,7 +75,33 @@ export async function GET(
       return NextResponse.json({ error: 'Not a member of this group' }, { status: 403 });
     }
 
-    return NextResponse.json({ group });
+    // Fetch settlements for this group
+    const settlements = await prisma.settlement.findMany({
+      where: {
+        groupId: id,
+      },
+      include: {
+        fromUser: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+          },
+        },
+        toUser: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+          },
+        },
+      },
+      orderBy: {
+        settledAt: 'desc',
+      },
+    });
+
+    return NextResponse.json({ group, settlements });
   } catch (error) {
     console.error('Get group error:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });

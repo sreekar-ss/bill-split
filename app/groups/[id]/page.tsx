@@ -46,6 +46,7 @@ export default function GroupDetailPage() {
 
   const [loading, setLoading] = useState(true);
   const [group, setGroup] = useState<any>(null);
+  const [settlements, setSettlements] = useState<any[]>([]);
   const [addMemberDialogOpen, setAddMemberDialogOpen] = useState(false);
   const [addExpenseDialogOpen, setAddExpenseDialogOpen] = useState(false);
   const [memberEmail, setMemberEmail] = useState('');
@@ -70,6 +71,7 @@ export default function GroupDetailPage() {
     try {
       const data = await groupsApi.getById(groupId);
       setGroup(data.group);
+      setSettlements(data.settlements || []);
     } catch (error) {
       console.error('Failed to load group:', error);
       router.push('/dashboard');
@@ -329,10 +331,10 @@ export default function GroupDetailPage() {
           </Card>
         )}
 
-        {/* Expenses */}
+        {/* Activity Timeline (Expenses + Settlements) */}
         <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 2 }}>
           <Typography variant="h6" fontWeight={600}>
-            Expenses
+            Activity
           </Typography>
           <Button
             variant="contained"
@@ -343,12 +345,12 @@ export default function GroupDetailPage() {
           </Button>
         </Stack>
 
-        {group.expenses.length === 0 ? (
+        {group.expenses.length === 0 && settlements.length === 0 ? (
           <Card>
             <CardContent sx={{ textAlign: 'center', py: 6 }}>
               <Receipt sx={{ fontSize: 60, color: 'text.secondary', mb: 2 }} />
               <Typography variant="h6" gutterBottom>
-                No expenses yet
+                No activity yet
               </Typography>
               <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
                 Add your first expense to start splitting costs
@@ -364,33 +366,63 @@ export default function GroupDetailPage() {
           </Card>
         ) : (
           <Stack spacing={2}>
-            {group.expenses.map((expense: any) => (
-              <Card key={expense.id}>
-                <CardContent>
-                  <Stack direction="row" justifyContent="space-between" alignItems="start">
-                    <Box sx={{ flex: 1 }}>
-                      <Typography variant="h6" fontWeight={600}>
-                        {expense.description}
-                      </Typography>
-                      <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
-                        Paid by {expense.createdBy.name} • {formatDate(expense.date)}
-                      </Typography>
-                      <Stack direction="row" spacing={1} sx={{ mt: 1 }}>
-                        <Chip label={expense.category} size="small" />
-                        <Chip
-                          label={`Split ${expense.splits.length} ways`}
-                          size="small"
-                          variant="outlined"
-                        />
+            {/* Merge expenses and settlements, then sort by date */}
+            {[
+              ...group.expenses.map((e: any) => ({ ...e, type: 'expense', date: new Date(e.date) })),
+              ...settlements.map((s: any) => ({ ...s, type: 'settlement', date: new Date(s.settledAt) })),
+            ]
+              .sort((a, b) => b.date.getTime() - a.date.getTime())
+              .map((item: any) =>
+                item.type === 'expense' ? (
+                  <Card key={`expense-${item.id}`}>
+                    <CardContent>
+                      <Stack direction="row" justifyContent="space-between" alignItems="start">
+                        <Box sx={{ flex: 1 }}>
+                          <Typography variant="h6" fontWeight={600}>
+                            {item.description}
+                          </Typography>
+                          <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+                            Paid by {item.createdBy.name} • {formatDate(item.date)}
+                          </Typography>
+                          <Stack direction="row" spacing={1} sx={{ mt: 1 }}>
+                            <Chip label={item.category} size="small" />
+                            <Chip
+                              label={`Split ${item.splits.length} ways`}
+                              size="small"
+                              variant="outlined"
+                            />
+                          </Stack>
+                        </Box>
+                        <Typography variant="h5" fontWeight={700} color="primary.main">
+                          {formatCurrency(item.amount)}
+                        </Typography>
                       </Stack>
-                    </Box>
-                    <Typography variant="h5" fontWeight={700} color="primary.main">
-                      {formatCurrency(expense.amount)}
-                    </Typography>
-                  </Stack>
-                </CardContent>
-              </Card>
-            ))}
+                    </CardContent>
+                  </Card>
+                ) : (
+                  <Card key={`settlement-${item.id}`} sx={{ bgcolor: 'success.50', borderLeft: 4, borderColor: 'success.main' }}>
+                    <CardContent>
+                      <Stack direction="row" justifyContent="space-between" alignItems="start">
+                        <Box sx={{ flex: 1 }}>
+                          <Stack direction="row" alignItems="center" spacing={1}>
+                            <CheckCircle color="success" />
+                            <Typography variant="h6" fontWeight={600} color="success.dark">
+                              Payment recorded
+                            </Typography>
+                          </Stack>
+                          <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+                            {item.fromUser.name} paid {item.toUser.name} • {formatDate(item.date)}
+                          </Typography>
+                          <Chip label="Settlement" size="small" color="success" sx={{ mt: 1 }} />
+                        </Box>
+                        <Typography variant="h5" fontWeight={700} color="success.main">
+                          {formatCurrency(item.amount)}
+                        </Typography>
+                      </Stack>
+                    </CardContent>
+                  </Card>
+                )
+              )}
           </Stack>
         )}
       </Container>

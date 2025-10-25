@@ -8,7 +8,6 @@ import {
   Typography,
   Card,
   CardContent,
-  Grid,
   Button,
   AppBar,
   Toolbar,
@@ -16,6 +15,14 @@ import {
   Avatar,
   Stack,
   CircularProgress,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  TextField,
+  Alert,
+  Grid,
+  Chip,
 } from '@mui/material';
 import {
   AccountBalanceWallet,
@@ -24,6 +31,7 @@ import {
   Logout,
   Add,
 } from '@mui/icons-material';
+import { groupsApi } from '@/lib/api';
 
 interface User {
   id: string;
@@ -32,45 +40,89 @@ interface User {
   avatar?: string;
 }
 
+interface Group {
+  id: string;
+  name: string;
+  description?: string;
+  category?: string;
+  members: Array<{
+    user: User;
+  }>;
+  _count: {
+    expenses: number;
+  };
+}
+
 export default function DashboardPage() {
   const router = useRouter();
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const [groups, setGroups] = useState<Group[]>([]);
+  const [createDialogOpen, setCreateDialogOpen] = useState(false);
+  const [newGroupName, setNewGroupName] = useState('');
+  const [newGroupDescription, setNewGroupDescription] = useState('');
+  const [error, setError] = useState('');
+  const [creating, setCreating] = useState(false);
 
   useEffect(() => {
-    // Check if user is authenticated
     const token = localStorage.getItem('token');
     if (!token) {
       router.push('/login');
       return;
     }
 
-    // Get user data from token (in a real app, you'd verify this with an API call)
     try {
       const payload = JSON.parse(atob(token.split('.')[1]));
-      // For now, we'll just use the token data
-      // In production, you'd make an API call to get full user info
       setUser({
         id: payload.userId,
-        name: 'Loading...', // We'll fetch this properly later
+        name: payload.email.split('@')[0],
         email: payload.email,
       });
       
-      // TODO: Fetch actual user data from API
-      setTimeout(() => {
-        setUser({
-          id: payload.userId,
-          name: payload.email.split('@')[0], // Temporary: use email username
-          email: payload.email,
-        });
-        setLoading(false);
-      }, 500);
+      loadGroups();
     } catch (error) {
       console.error('Invalid token:', error);
       localStorage.removeItem('token');
       router.push('/login');
     }
   }, [router]);
+
+  const loadGroups = async () => {
+    try {
+      const data = await groupsApi.getAll();
+      setGroups(data.groups);
+    } catch (error) {
+      console.error('Failed to load groups:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleCreateGroup = async () => {
+    if (!newGroupName.trim()) {
+      setError('Group name is required');
+      return;
+    }
+
+    setCreating(true);
+    setError('');
+
+    try {
+      await groupsApi.create({
+        name: newGroupName,
+        description: newGroupDescription,
+      });
+
+      setCreateDialogOpen(false);
+      setNewGroupName('');
+      setNewGroupDescription('');
+      loadGroups();
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setCreating(false);
+    }
+  };
 
   const handleLogout = () => {
     localStorage.removeItem('token');
@@ -79,18 +131,13 @@ export default function DashboardPage() {
 
   if (loading) {
     return (
-      <Box
-        sx={{
-          minHeight: '100vh',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-        }}
-      >
+      <Box sx={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
         <CircularProgress />
       </Box>
     );
   }
+
+  const totalExpenses = groups.reduce((sum, g) => sum + g._count.expenses, 0);
 
   return (
     <Box sx={{ minHeight: '100vh', bgcolor: 'background.default' }}>
@@ -113,7 +160,6 @@ export default function DashboardPage() {
         </Toolbar>
       </AppBar>
 
-      {/* Main Content */}
       <Container maxWidth="lg" sx={{ py: 4 }}>
         <Typography variant="h4" fontWeight={700} gutterBottom>
           Welcome back, {user?.name}! 👋
@@ -128,19 +174,12 @@ export default function DashboardPage() {
             <Card>
               <CardContent>
                 <Stack direction="row" alignItems="center" spacing={2}>
-                  <Box
-                    sx={{
-                      bgcolor: 'primary.light',
-                      color: 'white',
-                      p: 1.5,
-                      borderRadius: 2,
-                    }}
-                  >
+                  <Box sx={{ bgcolor: 'primary.light', color: 'white', p: 1.5, borderRadius: 2 }}>
                     <Receipt />
                   </Box>
                   <Box>
                     <Typography variant="h4" fontWeight={700}>
-                      0
+                      {totalExpenses}
                     </Typography>
                     <Typography variant="body2" color="text.secondary">
                       Total Expenses
@@ -155,19 +194,12 @@ export default function DashboardPage() {
             <Card>
               <CardContent>
                 <Stack direction="row" alignItems="center" spacing={2}>
-                  <Box
-                    sx={{
-                      bgcolor: 'secondary.light',
-                      color: 'white',
-                      p: 1.5,
-                      borderRadius: 2,
-                    }}
-                  >
+                  <Box sx={{ bgcolor: 'secondary.light', color: 'white', p: 1.5, borderRadius: 2 }}>
                     <PeopleAlt />
                   </Box>
                   <Box>
                     <Typography variant="h4" fontWeight={700}>
-                      0
+                      {groups.length}
                     </Typography>
                     <Typography variant="body2" color="text.secondary">
                       Groups
@@ -182,14 +214,7 @@ export default function DashboardPage() {
             <Card>
               <CardContent>
                 <Stack direction="row" alignItems="center" spacing={2}>
-                  <Box
-                    sx={{
-                      bgcolor: 'success.light',
-                      color: 'white',
-                      p: 1.5,
-                      borderRadius: 2,
-                    }}
-                  >
+                  <Box sx={{ bgcolor: 'success.light', color: 'white', p: 1.5, borderRadius: 2 }}>
                     <AccountBalanceWallet />
                   </Box>
                   <Box>
@@ -206,40 +231,123 @@ export default function DashboardPage() {
           </Grid>
         </Grid>
 
-        {/* Quick Actions */}
-        <Card>
-          <CardContent>
-            <Typography variant="h6" fontWeight={600} gutterBottom>
-              Quick Actions
-            </Typography>
-            <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-              Get started by creating your first group or expense
-            </Typography>
-            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
+        {/* Groups Section */}
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+          <Typography variant="h5" fontWeight={600}>
+            Your Groups
+          </Typography>
+          <Button
+            variant="contained"
+            startIcon={<Add />}
+            onClick={() => setCreateDialogOpen(true)}
+          >
+            Create Group
+          </Button>
+        </Box>
+
+        {groups.length === 0 ? (
+          <Card>
+            <CardContent sx={{ textAlign: 'center', py: 6 }}>
+              <PeopleAlt sx={{ fontSize: 60, color: 'text.secondary', mb: 2 }} />
+              <Typography variant="h6" gutterBottom>
+                No groups yet
+              </Typography>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+                Create your first group to start splitting expenses
+              </Typography>
               <Button
                 variant="contained"
                 startIcon={<Add />}
-                size="large"
-                disabled
+                onClick={() => setCreateDialogOpen(true)}
               >
-                Add Expense
+                Create Your First Group
               </Button>
-              <Button
-                variant="outlined"
-                startIcon={<PeopleAlt />}
-                size="large"
-                disabled
-              >
-                Create Group
-              </Button>
-            </Stack>
-            <Typography variant="caption" color="text.secondary" sx={{ mt: 2, display: 'block' }}>
-              Note: These features will be implemented in the next phase
-            </Typography>
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
+        ) : (
+          <Grid container spacing={3}>
+            {groups.map((group) => (
+              <Grid xs={12} sm={6} md={4} key={group.id}>
+                <Card
+                  sx={{
+                    cursor: 'pointer',
+                    transition: 'all 0.3s',
+                    '&:hover': {
+                      transform: 'translateY(-4px)',
+                      boxShadow: 4,
+                    },
+                  }}
+                  onClick={() => router.push(`/groups/${group.id}`)}
+                >
+                  <CardContent>
+                    <Typography variant="h6" fontWeight={600} gutterBottom>
+                      {group.name}
+                    </Typography>
+                    {group.description && (
+                      <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                        {group.description}
+                      </Typography>
+                    )}
+                    <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 2 }}>
+                      <PeopleAlt fontSize="small" color="action" />
+                      <Typography variant="body2" color="text.secondary">
+                        {group.members.length} {group.members.length === 1 ? 'member' : 'members'}
+                      </Typography>
+                    </Stack>
+                    <Stack direction="row" spacing={1} alignItems="center">
+                      <Receipt fontSize="small" color="action" />
+                      <Typography variant="body2" color="text.secondary">
+                        {group._count.expenses} {group._count.expenses === 1 ? 'expense' : 'expenses'}
+                      </Typography>
+                    </Stack>
+                  </CardContent>
+                </Card>
+              </Grid>
+            ))}
+          </Grid>
+        )}
       </Container>
+
+      {/* Create Group Dialog */}
+      <Dialog open={createDialogOpen} onClose={() => setCreateDialogOpen(false)} maxWidth="sm" fullWidth>
+        <DialogTitle>Create New Group</DialogTitle>
+        <DialogContent>
+          {error && (
+            <Alert severity="error" sx={{ mb: 2 }}>
+              {error}
+            </Alert>
+          )}
+          <TextField
+            autoFocus
+            margin="dense"
+            label="Group Name"
+            fullWidth
+            required
+            value={newGroupName}
+            onChange={(e) => setNewGroupName(e.target.value)}
+            placeholder="e.g., Weekend Trip, Apartment, Road Trip"
+            sx={{ mb: 2 }}
+          />
+          <TextField
+            margin="dense"
+            label="Description (Optional)"
+            fullWidth
+            multiline
+            rows={3}
+            value={newGroupDescription}
+            onChange={(e) => setNewGroupDescription(e.target.value)}
+            placeholder="What's this group for?"
+          />
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2 }}>
+          <Button onClick={() => setCreateDialogOpen(false)} disabled={creating}>
+            Cancel
+          </Button>
+          <Button onClick={handleCreateGroup} variant="contained" disabled={creating}>
+            {creating ? 'Creating...' : 'Create Group'}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 }
-

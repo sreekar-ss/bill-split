@@ -5,7 +5,7 @@ import { verifyToken } from '@/lib/auth';
 // GET /api/groups/[id] - Get group details with expenses and balances
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const token = request.headers.get('authorization')?.replace('Bearer ', '');
@@ -19,9 +19,11 @@ export async function GET(
       return NextResponse.json({ error: 'Invalid token' }, { status: 401 });
     }
 
+    const { id } = await params;
+
     // Get group with all expenses and members
     const group = await prisma.group.findUnique({
-      where: { id: params.id },
+      where: { id },
       include: {
         members: {
           include: {

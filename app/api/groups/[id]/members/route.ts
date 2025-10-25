@@ -5,7 +5,7 @@ import { verifyToken } from '@/lib/auth';
 // POST /api/groups/[id]/members - Add a member to the group
 export async function POST(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const token = request.headers.get('authorization')?.replace('Bearer ', '');
@@ -19,6 +19,7 @@ export async function POST(
       return NextResponse.json({ error: 'Invalid token' }, { status: 401 });
     }
 
+    const { id } = await params;
     const body = await request.json();
     const { email } = body;
 
@@ -38,7 +39,7 @@ export async function POST(
     // Check if requesting user is a member of the group
     const groupMember = await prisma.groupMember.findFirst({
       where: {
-        groupId: params.id,
+        groupId: id,
         userId: payload.userId,
       },
     });
@@ -51,7 +52,7 @@ export async function POST(
     const existingMember = await prisma.groupMember.findUnique({
       where: {
         groupId_userId: {
-          groupId: params.id,
+          groupId: id,
           userId: userToAdd.id,
         },
       },
@@ -64,7 +65,7 @@ export async function POST(
     // Add user to group
     const member = await prisma.groupMember.create({
       data: {
-        groupId: params.id,
+        groupId: id,
         userId: userToAdd.id,
         role: 'member',
       },

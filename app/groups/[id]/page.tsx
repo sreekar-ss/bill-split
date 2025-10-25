@@ -36,7 +36,7 @@ import {
   AccountBalanceWallet,
 } from '@mui/icons-material';
 import { groupsApi, expensesApi } from '@/lib/api';
-import { formatCurrency, formatDate } from '@/lib/utils';
+import { formatCurrency, formatDate, simplifyDebts } from '@/lib/utils';
 
 export default function GroupDetailPage() {
   const router = useRouter();
@@ -128,37 +128,39 @@ export default function GroupDetailPage() {
     }
   };
 
-  // Calculate balances
+  // Calculate balances with debt simplification
   const calculateBalances = () => {
     if (!group?.expenses) return [];
 
-    const balances: Record<string, Record<string, number>> = {};
+    // Step 1: Calculate net balance for each user
+    const netBalances: Record<string, number> = {};
 
     group.expenses.forEach((expense: any) => {
+      const paidBy = expense.createdById;
+      
       expense.splits.forEach((split: any) => {
-        if (!split.settled && split.userId !== expense.createdById) {
-          if (!balances[split.userId]) {
-            balances[split.userId] = {};
-          }
-          balances[split.userId][expense.createdById] =
-            (balances[split.userId][expense.createdById] || 0) + split.amount;
+        if (!split.settled) {
+          // The person who paid should receive money
+          netBalances[paidBy] = (netBalances[paidBy] || 0) + split.amount;
+          // The person who owes should pay money
+          netBalances[split.userId] = (netBalances[split.userId] || 0) - split.amount;
         }
       });
     });
 
-    const result: Array<{ from: string; to: string; amount: number }> = [];
-    Object.entries(balances).forEach(([fromId, debts]) => {
-      Object.entries(debts).forEach(([toId, amount]) => {
-        const fromUser = group.members.find((m: any) => m.user.id === fromId)?.user;
-        const toUser = group.members.find((m: any) => m.user.id === toId)?.user;
-        if (fromUser && toUser) {
-          result.push({
-            from: fromUser.name,
-            to: toUser.name,
-            amount,
-          });
-        }
-      });
+    // Step 2: Simplify debts to minimize transactions
+    const simplifiedDebts = simplifyDebts(netBalances);
+
+    // Step 3: Map user IDs to names
+    const result = simplifiedDebts.map((debt) => {
+      const fromUser = group.members.find((m: any) => m.user.id === debt.from)?.user;
+      const toUser = group.members.find((m: any) => m.user.id === debt.to)?.user;
+      
+      return {
+        from: fromUser?.name || 'Unknown',
+        to: toUser?.name || 'Unknown',
+        amount: debt.amount,
+      };
     });
 
     return result;

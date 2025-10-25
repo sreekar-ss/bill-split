@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "eslint",
     "postinstall": "prisma generate",
-    "deploy": "node scripts/deploy.js"
+    "deploy": "node scripts/deploy.js",
+    "vercel-build": "prisma generate && next build"
   },
   "dependencies": {
     "@emotion/react": "^11.14.0",

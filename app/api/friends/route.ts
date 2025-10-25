@@ -116,14 +116,16 @@ export async function GET(request: NextRequest) {
     );
 
     return NextResponse.json({ friends: friendsWithBalances });
-  } catch (error: any) {
-    console.error('Get friends error:', error);
-    console.error('Error details:', error.message, error.stack);
-    return NextResponse.json({ 
-      error: 'Internal server error',
-      details: error.message 
-    }, { status: 500 });
-  }
+        } catch (error: any) {
+          console.error('Get friends error:', error);
+          const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+          const errorStack = error instanceof Error ? error.stack : undefined;
+          console.error('Error details:', errorMessage, errorStack);
+          return NextResponse.json({
+            error: 'Internal server error',
+            details: errorMessage
+          }, { status: 500 });
+        }
 }
 
 // POST /api/friends - Add a friend

@@ -295,38 +295,42 @@ export default function GroupDetailPage() {
                   Balances
                 </Typography>
               </Stack>
-              <List dense>
+              <Stack spacing={2}>
                 {balances.map((balance, index) => (
-                  <ListItem
+                  <Box
                     key={index}
-                    secondaryAction={
-                      <Button
-                        variant="contained"
+                    sx={{
+                      display: 'flex',
+                      flexDirection: { xs: 'column', sm: 'row' },
+                      gap: 2,
+                      alignItems: { xs: 'stretch', sm: 'center' },
+                      justifyContent: 'space-between',
+                      py: 1,
+                    }}
+                  >
+                    <Typography sx={{ flex: 1 }}>
+                      <strong>{balance.from}</strong> owes <strong>{balance.to}</strong>{' '}
+                      <Chip
+                        label={formatCurrency(balance.amount)}
                         size="small"
                         color="success"
-                        startIcon={<CheckCircle />}
-                        onClick={() => handleSettleUp(balance)}
-                      >
-                        Settle Up
-                      </Button>
-                    }
-                  >
-                    <ListItemText
-                      primary={
-                        <Typography>
-                          <strong>{balance.from}</strong> owes <strong>{balance.to}</strong>{' '}
-                          <Chip
-                            label={formatCurrency(balance.amount)}
-                            size="small"
-                            color="success"
-                            sx={{ ml: 1 }}
-                          />
-                        </Typography>
-                      }
-                    />
-                  </ListItem>
+                        sx={{ ml: 1 }}
+                      />
+                    </Typography>
+                    <Button
+                      variant="contained"
+                      size="small"
+                      color="success"
+                      startIcon={<CheckCircle />}
+                      onClick={() => handleSettleUp(balance)}
+                      fullWidth={{ xs: true, sm: false }}
+                      sx={{ minWidth: { sm: 120 } }}
+                    >
+                      Settle Up
+                    </Button>
+                  </Box>
                 ))}
-              </List>
+              </Stack>
             </CardContent>
           </Card>
         )}

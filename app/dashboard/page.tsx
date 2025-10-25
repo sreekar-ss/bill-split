@@ -168,9 +168,11 @@ export default function DashboardPage() {
             <Typography variant="body2" sx={{ display: { xs: 'none', sm: 'block' } }}>
               {user?.email}
             </Typography>
-            <Avatar sx={{ width: 32, height: 32, bgcolor: 'secondary.main' }}>
-              {user?.name?.[0]?.toUpperCase()}
-            </Avatar>
+            <IconButton onClick={() => router.push('/profile')} sx={{ p: 0.5 }}>
+              <Avatar sx={{ width: 32, height: 32, bgcolor: 'secondary.main' }}>
+                {user?.name?.[0]?.toUpperCase()}
+              </Avatar>
+            </IconButton>
             <IconButton color="inherit" onClick={handleLogout} title="Logout">
               <Logout />
             </IconButton>

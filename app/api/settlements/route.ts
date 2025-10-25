@@ -89,10 +89,23 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    console.log('Settlement calculation:', {
+      fromUser: fromUser.name,
+      toUser: toUser.name,
+      netAmount,
+      requestedAmount: amount,
+      splitsToSettle: splitsToSettle.length,
+    });
+
     // Verify the settlement amount matches (with small tolerance for floating point)
     if (Math.abs(netAmount - amount) > 0.01) {
+      console.error('Settlement amount mismatch:', {
+        expected: netAmount,
+        got: amount,
+        difference: Math.abs(netAmount - amount),
+      });
       return NextResponse.json(
-        { error: `Settlement amount mismatch. Expected ${netAmount}, got ${amount}` },
+        { error: `Settlement amount mismatch. Expected ${netAmount.toFixed(2)}, got ${amount.toFixed(2)}` },
         { status: 400 }
       );
     }
@@ -106,7 +119,8 @@ export async function POST(request: NextRequest) {
           fromUserId: fromUser.id,
           toUserId: toUser.id,
           amount,
-          date: new Date(),
+          currency: group.currency,
+          settledAt: new Date(),
         },
       });
 
@@ -129,10 +143,15 @@ export async function POST(request: NextRequest) {
       message: 'Settlement recorded successfully',
       settlement,
     });
-  } catch (error) {
+  } catch (error: any) {
     console.error('Settlement error:', error);
+    console.error('Error details:', {
+      message: error.message,
+      stack: error.stack,
+      code: error.code,
+    });
     return NextResponse.json(
-      { error: 'Internal server error' },
+      { error: 'Internal server error', details: error.message },
       { status: 500 }
     );
   }

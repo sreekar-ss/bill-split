@@ -46,16 +46,19 @@ export const groupsApi = {
 
 // Expenses API
 export const expensesApi = {
-  create: (data: {
-    groupId: string;
-    amount: number;
-    description: string;
-    category?: string;
-    date?: string;
-  }) =>
+  create: (data: any) =>
     apiRequest('/api/expenses', {
       method: 'POST',
       body: JSON.stringify(data),
+    }),
+  update: (id: string, data: any) =>
+    apiRequest(`/api/expenses/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    }),
+  delete: (id: string) =>
+    apiRequest(`/api/expenses/${id}`, {
+      method: 'DELETE',
     }),
 };
 

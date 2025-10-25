@@ -23,10 +23,10 @@ import {
   Alert,
   Chip,
   Divider,
-  List,
-  ListItem,
-  ListItemText,
   AvatarGroup,
+  Menu,
+  MenuItem,
+  ListItemIcon,
 } from '@mui/material';
 import {
   ArrowBack,
@@ -35,10 +35,14 @@ import {
   Receipt,
   AccountBalanceWallet,
   CheckCircle,
+  Edit,
+  DeleteOutline,
+  MoreVert,
 } from '@mui/icons-material';
 import { groupsApi, expensesApi } from '@/lib/api';
 import { formatCurrency, formatDate, simplifyDebts, formatSplitMethod } from '@/lib/utils';
 import AddExpenseDialog from '@/app/components/AddExpenseDialog';
+import EditExpenseDialog from '@/app/components/EditExpenseDialog';
 
 export default function GroupDetailPage() {
   const router = useRouter();
@@ -48,17 +52,32 @@ export default function GroupDetailPage() {
   const [loading, setLoading] = useState(true);
   const [group, setGroup] = useState<any>(null);
   const [settlements, setSettlements] = useState<any[]>([]);
+  const [currentUserId, setCurrentUserId] = useState<string>('');
   const [addMemberDialogOpen, setAddMemberDialogOpen] = useState(false);
   const [addExpenseDialogOpen, setAddExpenseDialogOpen] = useState(false);
+  const [editExpenseDialogOpen, setEditExpenseDialogOpen] = useState(false);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [selectedExpense, setSelectedExpense] = useState<any>(null);
   const [memberEmail, setMemberEmail] = useState('');
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [settleDialogOpen, setSettleDialogOpen] = useState(false);
   const [settlementData, setSettlementData] = useState<{ from: string; to: string; amount: number } | null>(null);
+  const [menuAnchor, setMenuAnchor] = useState<null | HTMLElement>(null);
+  const [menuExpense, setMenuExpense] = useState<any>(null);
 
   useEffect(() => {
     const token = localStorage.getItem('token');
     if (!token) {
+      router.push('/login');
+      return;
+    }
+
+    try {
+      const payload = JSON.parse(atob(token.split('.')[1]));
+      setCurrentUserId(payload.userId);
+    } catch (error) {
+      console.error('Invalid token:', error);
       router.push('/login');
       return;
     }
@@ -139,12 +158,56 @@ export default function GroupDetailPage() {
 
       setSettleDialogOpen(false);
       setSettlementData(null);
-      loadGroup(); // Reload to show updated balances
+      loadGroup();
     } catch (err: any) {
       setError(err.message);
     } finally {
       setSubmitting(false);
     }
+  };
+
+  const handleEditExpense = async (expenseId: string, data: any) => {
+    await expensesApi.update(expenseId, data);
+    loadGroup();
+  };
+
+  const handleDeleteExpense = async () => {
+    if (!selectedExpense) return;
+    setSubmitting(true);
+    setError('');
+
+    try {
+      await expensesApi.delete(selectedExpense.id);
+      setDeleteConfirmOpen(false);
+      setSelectedExpense(null);
+      loadGroup();
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleMenuOpen = (event: React.MouseEvent<HTMLElement>, expense: any) => {
+    setMenuAnchor(event.currentTarget);
+    setMenuExpense(expense);
+  };
+
+  const handleMenuClose = () => {
+    setMenuAnchor(null);
+    setMenuExpense(null);
+  };
+
+  const handleEditClick = () => {
+    setSelectedExpense(menuExpense);
+    setEditExpenseDialogOpen(true);
+    handleMenuClose();
+  };
+
+  const handleDeleteClick = () => {
+    setSelectedExpense(menuExpense);
+    setDeleteConfirmOpen(true);
+    handleMenuClose();
   };
 
   // Calculate balances with debt simplification
@@ -295,8 +358,7 @@ export default function GroupDetailPage() {
                       color="success"
                       startIcon={<CheckCircle />}
                       onClick={() => handleSettleUp(balance)}
-                      fullWidth={{ xs: true, sm: false }}
-                      sx={{ minWidth: { sm: 120 } }}
+                      sx={{ minWidth: { sm: 120 }, width: { xs: '100%', sm: 'auto' } }}
                     >
                       Settle Up
                     </Button>
@@ -365,9 +427,19 @@ export default function GroupDetailPage() {
                             <Chip label={formatSplitMethod(item.splitMethod)} size="small" variant="outlined" />
                           </Stack>
                         </Box>
-                        <Typography variant="h5" fontWeight={700} color="primary.main">
-                          {formatCurrency(item.amount)}
-                        </Typography>
+                        <Stack direction="row" alignItems="center" spacing={1}>
+                          <Typography variant="h5" fontWeight={700} color="primary.main">
+                            {formatCurrency(item.amount)}
+                          </Typography>
+                          {item.createdById === currentUserId && (
+                            <IconButton
+                              size="small"
+                              onClick={(e) => handleMenuOpen(e, item)}
+                            >
+                              <MoreVert />
+                            </IconButton>
+                          )}
+                        </Stack>
                       </Stack>
                     </CardContent>
                   </Card>
@@ -470,6 +542,56 @@ export default function GroupDetailPage() {
           </Button>
           <Button onClick={confirmSettlement} variant="contained" color="success" disabled={submitting}>
             {submitting ? 'Recording...' : 'Confirm Settlement'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Expense Actions Menu */}
+      <Menu
+        anchorEl={menuAnchor}
+        open={Boolean(menuAnchor)}
+        onClose={handleMenuClose}
+      >
+        <MenuItem onClick={handleEditClick}>
+          <ListItemIcon>
+            <Edit fontSize="small" />
+          </ListItemIcon>
+          Edit
+        </MenuItem>
+        <MenuItem onClick={handleDeleteClick}>
+          <ListItemIcon>
+            <DeleteOutline fontSize="small" color="error" />
+          </ListItemIcon>
+          <Typography color="error">Delete</Typography>
+        </MenuItem>
+      </Menu>
+
+      {/* Edit Expense Dialog */}
+      {selectedExpense && (
+        <EditExpenseDialog
+          open={editExpenseDialogOpen}
+          onClose={() => setEditExpenseDialogOpen(false)}
+          members={group.members.map((m: any) => ({ userId: m.user.id, name: m.user.name }))}
+          expense={selectedExpense}
+          onSubmit={handleEditExpense}
+        />
+      )}
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={deleteConfirmOpen} onClose={() => setDeleteConfirmOpen(false)} maxWidth="sm">
+        <DialogTitle>Delete Expense?</DialogTitle>
+        <DialogContent>
+          {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
+          <Typography>
+            Are you sure you want to delete &ldquo;{selectedExpense?.description}&rdquo;? This action cannot be undone.
+          </Typography>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2 }}>
+          <Button onClick={() => setDeleteConfirmOpen(false)} disabled={submitting}>
+            Cancel
+          </Button>
+          <Button onClick={handleDeleteExpense} variant="contained" color="error" disabled={submitting}>
+            {submitting ? 'Deleting...' : 'Delete'}
           </Button>
         </DialogActions>
       </Dialog>

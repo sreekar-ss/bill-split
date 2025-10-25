@@ -15,6 +15,16 @@ export function formatDate(date: Date | string): string {
   }).format(new Date(date));
 }
 
+export function formatSplitMethod(method: string): string {
+  const labels: Record<string, string> = {
+    equal: 'Split equally',
+    percentage: 'Split by %',
+    exact: 'Split by amount',
+    itemized: 'Itemized',
+  };
+  return labels[method] || 'Split equally';
+}
+
 export function calculateBalances(expenses: any[], userId: string) {
   // Calculate who owes whom based on expenses
   const balances: Record<string, number> = {};

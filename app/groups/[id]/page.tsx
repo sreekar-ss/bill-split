@@ -37,7 +37,7 @@ import {
   CheckCircle,
 } from '@mui/icons-material';
 import { groupsApi, expensesApi } from '@/lib/api';
-import { formatCurrency, formatDate, simplifyDebts } from '@/lib/utils';
+import { formatCurrency, formatDate, simplifyDebts, formatSplitMethod } from '@/lib/utils';
 import AddExpenseDialog from '@/app/components/AddExpenseDialog';
 
 export default function GroupDetailPage() {
@@ -362,11 +362,7 @@ export default function GroupDetailPage() {
                           </Typography>
                           <Stack direction="row" spacing={1} sx={{ mt: 1 }}>
                             <Chip label={item.category} size="small" />
-                            <Chip
-                              label={`Split ${item.splits.length} ways`}
-                              size="small"
-                              variant="outlined"
-                            />
+                            <Chip label={formatSplitMethod(item.splitMethod)} size="small" variant="outlined" />
                           </Stack>
                         </Box>
                         <Typography variant="h5" fontWeight={700} color="primary.main">

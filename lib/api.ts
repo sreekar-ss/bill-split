@@ -62,3 +62,13 @@ export const expensesApi = {
     }),
 };
 
+// Friends API
+export const friendsApi = {
+  getAll: () => apiRequest('/api/friends'),
+  add: (friendEmail: string) =>
+    apiRequest('/api/friends', {
+      method: 'POST',
+      body: JSON.stringify({ friendEmail }),
+    }),
+};
+

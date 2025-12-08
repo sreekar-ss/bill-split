@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import {
   Box,
@@ -21,28 +21,22 @@ import {
   DialogActions,
   TextField,
   Alert,
-  Chip,
   Divider,
   AvatarGroup,
   Menu,
   MenuItem,
   ListItemIcon,
 } from '@mui/material';
-import {
-  ArrowBack,
-  Add,
-  PersonAdd,
-  Receipt,
-  AccountBalanceWallet,
-  CheckCircle,
-  Edit,
-  DeleteOutline,
-  MoreVert,
-} from '@mui/icons-material';
+import { ArrowBack, Add, PersonAdd, AccountBalanceWallet, Edit, DeleteOutline } from '@mui/icons-material';
 import { groupsApi, expensesApi } from '@/lib/api';
-import { formatCurrency, formatDate, simplifyDebts, formatSplitMethod } from '@/lib/utils';
+import { formatCurrency, simplifyDebts } from '@/lib/utils';
 import AddExpenseDialog from '@/app/components/AddExpenseDialog';
 import EditExpenseDialog from '@/app/components/EditExpenseDialog';
+import BalanceRow from '@/app/components/BalanceRow';
+import ActivityEmptyState from '@/app/components/ActivityEmptyState';
+import ExpenseCard from '@/app/components/ExpenseCard';
+import SettlementCard from '@/app/components/SettlementCard';
+import type { Group, Settlement, Expense } from '@/lib/types';
 
 export default function GroupDetailPage() {
   const router = useRouter();
@@ -50,21 +44,34 @@ export default function GroupDetailPage() {
   const groupId = params.id as string;
 
   const [loading, setLoading] = useState(true);
-  const [group, setGroup] = useState<any>(null);
-  const [settlements, setSettlements] = useState<any[]>([]);
+  const [group, setGroup] = useState<Group | null>(null);
+  const [settlements, setSettlements] = useState<Settlement[]>([]);
   const [currentUserId, setCurrentUserId] = useState<string>('');
   const [addMemberDialogOpen, setAddMemberDialogOpen] = useState(false);
   const [addExpenseDialogOpen, setAddExpenseDialogOpen] = useState(false);
   const [editExpenseDialogOpen, setEditExpenseDialogOpen] = useState(false);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
-  const [selectedExpense, setSelectedExpense] = useState<any>(null);
+  const [selectedExpense, setSelectedExpense] = useState<Expense | null>(null);
   const [memberEmail, setMemberEmail] = useState('');
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [settleDialogOpen, setSettleDialogOpen] = useState(false);
   const [settlementData, setSettlementData] = useState<{ from: string; to: string; amount: number } | null>(null);
   const [menuAnchor, setMenuAnchor] = useState<null | HTMLElement>(null);
-  const [menuExpense, setMenuExpense] = useState<any>(null);
+  const [menuExpense, setMenuExpense] = useState<Expense | null>(null);
+
+  const loadGroup = useCallback(async () => {
+    try {
+      const data = await groupsApi.getById(groupId);
+      setGroup(data.group as Group);
+      setSettlements((data.settlements || []) as Settlement[]);
+    } catch (error) {
+      console.error('Failed to load group:', error);
+      router.push('/dashboard');
+    } finally {
+      setLoading(false);
+    }
+  }, [groupId, router]);
 
   useEffect(() => {
     const token = localStorage.getItem('token');
@@ -81,22 +88,8 @@ export default function GroupDetailPage() {
       router.push('/login');
       return;
     }
-
     loadGroup();
-  }, [groupId]);
-
-  const loadGroup = async () => {
-    try {
-      const data = await groupsApi.getById(groupId);
-      setGroup(data.group);
-      setSettlements(data.settlements || []);
-    } catch (error) {
-      console.error('Failed to load group:', error);
-      router.push('/dashboard');
-    } finally {
-      setLoading(false);
-    }
-  };
+  }, [groupId, router, loadGroup]);
 
   const handleAddMember = async () => {
     if (!memberEmail.trim()) {
@@ -112,14 +105,15 @@ export default function GroupDetailPage() {
       setAddMemberDialogOpen(false);
       setMemberEmail('');
       loadGroup();
-    } catch (err: any) {
-      setError(err.message);
+  } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Something went wrong';
+      setError(message);
     } finally {
       setSubmitting(false);
     }
   };
 
-  const handleAddExpense = async (expenseData: any) => {
+  const handleAddExpense = async (expenseData: Record<string, unknown>) => {
     await expensesApi.create(expenseData);
     loadGroup();
   };
@@ -159,14 +153,15 @@ export default function GroupDetailPage() {
       setSettleDialogOpen(false);
       setSettlementData(null);
       loadGroup();
-    } catch (err: any) {
-      setError(err.message);
+  } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Something went wrong';
+      setError(message);
     } finally {
       setSubmitting(false);
     }
   };
 
-  const handleEditExpense = async (expenseId: string, data: any) => {
+  const handleEditExpense = async (expenseId: string, data: Partial<Expense>) => {
     await expensesApi.update(expenseId, data);
     loadGroup();
   };
@@ -181,16 +176,17 @@ export default function GroupDetailPage() {
       setDeleteConfirmOpen(false);
       setSelectedExpense(null);
       loadGroup();
-    } catch (err: any) {
-      setError(err.message);
+  } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Something went wrong';
+      setError(message);
     } finally {
       setSubmitting(false);
     }
   };
 
-  const handleMenuOpen = (event: React.MouseEvent<HTMLElement>, expense: any) => {
+  const handleMenuOpen = (event: React.MouseEvent<HTMLElement>, expense: unknown) => {
     setMenuAnchor(event.currentTarget);
-    setMenuExpense(expense);
+    setMenuExpense(expense as Expense);
   };
 
   const handleMenuClose = () => {
@@ -217,10 +213,10 @@ export default function GroupDetailPage() {
     // Step 1: Calculate net balance for each user
     const netBalances: Record<string, number> = {};
 
-    group.expenses.forEach((expense: any) => {
+    group.expenses.forEach((expense: Expense) => {
       const paidBy = expense.createdById;
       
-      expense.splits.forEach((split: any) => {
+      expense.splits.forEach((split) => {
         if (!split.settled) {
           // The person who paid should receive money
           netBalances[paidBy] = (netBalances[paidBy] || 0) + split.amount;
@@ -235,8 +231,8 @@ export default function GroupDetailPage() {
 
     // Step 3: Map user IDs to names
     const result = simplifiedDebts.map((debt) => {
-      const fromUser = group.members.find((m: any) => m.user.id === debt.from)?.user;
-      const toUser = group.members.find((m: any) => m.user.id === debt.to)?.user;
+      const fromUser = group.members.find((m) => m.user.id === debt.from)?.user;
+      const toUser = group.members.find((m) => m.user.id === debt.to)?.user;
       
       return {
         from: fromUser?.name || 'Unknown',
@@ -307,14 +303,14 @@ export default function GroupDetailPage() {
                 Members:
               </Typography>
               <AvatarGroup max={5}>
-                {group.members.map((member: any) => (
+                {group.members.map((member) => (
                   <Avatar key={member.user.id} sx={{ bgcolor: 'primary.main' }}>
                     {member.user.name[0].toUpperCase()}
                   </Avatar>
                 ))}
               </AvatarGroup>
               <Typography variant="body2" color="text.secondary">
-                {group.members.map((m: any) => m.user.name).join(', ')}
+                {group.members.map((m) => m.user.name).join(', ')}
               </Typography>
             </Stack>
           </CardContent>
@@ -332,37 +328,13 @@ export default function GroupDetailPage() {
               </Stack>
               <Stack spacing={2}>
                 {balances.map((balance, index) => (
-                  <Box
+                  <BalanceRow
                     key={index}
-                    sx={{
-                      display: 'flex',
-                      flexDirection: { xs: 'column', sm: 'row' },
-                      gap: 2,
-                      alignItems: { xs: 'stretch', sm: 'center' },
-                      justifyContent: 'space-between',
-                      py: 1,
-                    }}
-                  >
-                    <Typography sx={{ flex: 1 }}>
-                      <strong>{balance.from}</strong> owes <strong>{balance.to}</strong>{' '}
-                      <Chip
-                        label={formatCurrency(balance.amount)}
-                        size="small"
-                        color="success"
-                        sx={{ ml: 1 }}
-                      />
-                    </Typography>
-                    <Button
-                      variant="contained"
-                      size="small"
-                      color="success"
-                      startIcon={<CheckCircle />}
-                      onClick={() => handleSettleUp(balance)}
-                      sx={{ minWidth: { sm: 120 }, width: { xs: '100%', sm: 'auto' } }}
-                    >
-                      Settle Up
-                    </Button>
-                  </Box>
+                    from={balance.from}
+                    to={balance.to}
+                    amount={balance.amount}
+                    onSettle={() => handleSettleUp(balance)}
+                  />
                 ))}
               </Stack>
             </CardContent>
@@ -384,87 +356,20 @@ export default function GroupDetailPage() {
         </Stack>
 
         {group.expenses.length === 0 && settlements.length === 0 ? (
-          <Card>
-            <CardContent sx={{ textAlign: 'center', py: 6 }}>
-              <Receipt sx={{ fontSize: 60, color: 'text.secondary', mb: 2 }} />
-              <Typography variant="h6" gutterBottom>
-                No activity yet
-              </Typography>
-              <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-                Add your first expense to start splitting costs
-              </Typography>
-              <Button
-                variant="contained"
-                startIcon={<Add />}
-                onClick={() => setAddExpenseDialogOpen(true)}
-              >
-                Add First Expense
-              </Button>
-            </CardContent>
-          </Card>
+          <ActivityEmptyState onAddExpense={() => setAddExpenseDialogOpen(true)} />
         ) : (
           <Stack spacing={2}>
             {/* Merge expenses and settlements, then sort by date */}
             {[
-              ...group.expenses.map((e: any) => ({ ...e, type: 'expense', date: new Date(e.date) })),
-              ...settlements.map((s: any) => ({ ...s, type: 'settlement', date: new Date(s.settledAt) })),
+              ...group.expenses.map((e: Expense) => ({ ...e, type: 'expense' as const, date: new Date(String(e.date)) })),
+              ...settlements.map((s: Settlement) => ({ ...s, type: 'settlement' as const, date: new Date(String(s.settledAt)) })),
             ]
               .sort((a, b) => b.date.getTime() - a.date.getTime())
-              .map((item: any) =>
+              .map((item) =>
                 item.type === 'expense' ? (
-                  <Card key={`expense-${item.id}`}>
-                    <CardContent>
-                      <Stack direction="row" justifyContent="space-between" alignItems="start">
-                        <Box sx={{ flex: 1 }}>
-                          <Typography variant="h6" fontWeight={600}>
-                            {item.description}
-                          </Typography>
-                          <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
-                            Paid by {item.createdBy.name} • {formatDate(item.date)}
-                          </Typography>
-                          <Stack direction="row" spacing={1} sx={{ mt: 1 }}>
-                            <Chip label={item.category} size="small" />
-                            <Chip label={formatSplitMethod(item.splitMethod)} size="small" variant="outlined" />
-                          </Stack>
-                        </Box>
-                        <Stack direction="row" alignItems="center" spacing={1}>
-                          <Typography variant="h5" fontWeight={700} color="primary.main">
-                            {formatCurrency(item.amount)}
-                          </Typography>
-                          {item.createdById === currentUserId && (
-                            <IconButton
-                              size="small"
-                              onClick={(e) => handleMenuOpen(e, item)}
-                            >
-                              <MoreVert />
-                            </IconButton>
-                          )}
-                        </Stack>
-                      </Stack>
-                    </CardContent>
-                  </Card>
+                  <ExpenseCard key={`expense-${item.id}`} item={item} currentUserId={currentUserId} onMenuOpen={handleMenuOpen} />
                 ) : (
-                  <Card key={`settlement-${item.id}`} sx={{ bgcolor: 'success.50', borderLeft: 4, borderColor: 'success.main' }}>
-                    <CardContent>
-                      <Stack direction="row" justifyContent="space-between" alignItems="start">
-                        <Box sx={{ flex: 1 }}>
-                          <Stack direction="row" alignItems="center" spacing={1}>
-                            <CheckCircle color="success" />
-                            <Typography variant="h6" fontWeight={600} color="success.dark">
-                              Payment recorded
-                            </Typography>
-                          </Stack>
-                          <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
-                            {item.fromUser.name} paid {item.toUser.name} • {formatDate(item.date)}
-                          </Typography>
-                          <Chip label="Settlement" size="small" color="success" sx={{ mt: 1 }} />
-                        </Box>
-                        <Typography variant="h5" fontWeight={700} color="success.main">
-                          {formatCurrency(item.amount)}
-                        </Typography>
-                      </Stack>
-                    </CardContent>
-                  </Card>
+                  <SettlementCard key={`settlement-${item.id}`} item={item} />
                 )
               )}
           </Stack>
@@ -508,7 +413,7 @@ export default function GroupDetailPage() {
       <AddExpenseDialog
         open={addExpenseDialogOpen}
         onClose={() => setAddExpenseDialogOpen(false)}
-        members={group.members.map((m: any) => ({ userId: m.user.id, name: m.user.name }))}
+        members={group.members.map((m) => ({ userId: m.user.id, name: m.user.name }))}
         onSubmit={handleAddExpense}
         groupId={groupId}
       />
@@ -571,7 +476,7 @@ export default function GroupDetailPage() {
         <EditExpenseDialog
           open={editExpenseDialogOpen}
           onClose={() => setEditExpenseDialogOpen(false)}
-          members={group.members.map((m: any) => ({ userId: m.user.id, name: m.user.name }))}
+          members={group.members.map((m) => ({ userId: m.user.id, name: m.user.name }))}
           expense={selectedExpense}
           onSubmit={handleEditExpense}
         />

@@ -19,6 +19,7 @@ import {
   Divider,
 } from '@mui/material';
 import { Add, Delete } from '@mui/icons-material';
+import type { AddExpensePayload } from '@/lib/types';
 
 interface Member {
   userId: string;
@@ -29,7 +30,7 @@ interface AddExpenseDialogProps {
   open: boolean;
   onClose: () => void;
   members: Member[];
-  onSubmit: (expenseData: any) => Promise<void>;
+  onSubmit: (expenseData: AddExpensePayload | Record<string, unknown>) => Promise<void>;
   groupId?: string;
   friendId?: string;
 }

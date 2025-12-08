@@ -18,20 +18,11 @@ import {
   Chip,
 } from '@mui/material';
 import { Add, Delete } from '@mui/icons-material';
+import type { Expense } from '@/lib/types';
 
 interface Member {
   userId: string;
   name: string;
-}
-
-interface Expense {
-  id: string;
-  description: string;
-  amount: number;
-  category?: string;
-  splitMethod: string;
-  splits: Array<{ userId: string; amount: number; percentage?: number }>;
-  items?: Array<{ name: string; amount: number; sharedBy: string[] }>;
 }
 
 interface EditExpenseDialogProps {

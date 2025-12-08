@@ -1,6 +1,7 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
+import type { Expense, Settlement } from '@/lib/types';
 import { useRouter, useParams } from 'next/navigation';
 import {
   Box,
@@ -19,27 +20,18 @@ import {
   DialogTitle,
   DialogContent,
   DialogActions,
-  TextField,
   Alert,
-  Chip,
   Menu,
   MenuItem,
   ListItemIcon,
 } from '@mui/material';
-import {
-  ArrowBack,
-  Add,
-  Receipt,
-  CheckCircle,
-  AccountBalanceWallet,
-  Edit,
-  DeleteOutline,
-  MoreVert,
-} from '@mui/icons-material';
-import { formatCurrency, formatDate, simplifyDebts, formatSplitMethod } from '@/lib/utils';
+import { ArrowBack, Add, Receipt, CheckCircle, AccountBalanceWallet, Edit, DeleteOutline } from '@mui/icons-material';
+import { formatCurrency } from '@/lib/utils';
 import { expensesApi } from '@/lib/api';
 import AddExpenseDialog from '@/app/components/AddExpenseDialog';
 import EditExpenseDialog from '@/app/components/EditExpenseDialog';
+import ExpenseCard from '@/app/components/ExpenseCard';
+import SettlementCard from '@/app/components/SettlementCard';
 
 export default function FriendDetailPage() {
   const router = useRouter();
@@ -47,18 +39,43 @@ export default function FriendDetailPage() {
   const friendId = params.id as string;
 
   const [loading, setLoading] = useState(true);
-  const [friend, setFriend] = useState<any>(null);
-  const [expenses, setExpenses] = useState<any[]>([]);
-  const [settlements, setSettlements] = useState<any[]>([]);
+  const [friend, setFriend] = useState<{ id: string; name: string; email: string } | null>(null);
+  const [expenses, setExpenses] = useState<Expense[]>([]);
+  const [settlements, setSettlements] = useState<Settlement[]>([]);
   const [addExpenseDialogOpen, setAddExpenseDialogOpen] = useState(false);
   const [editExpenseDialogOpen, setEditExpenseDialogOpen] = useState(false);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
-  const [selectedExpense, setSelectedExpense] = useState<any>(null);
-  const [currentUser, setCurrentUser] = useState<any>(null);
+  const [selectedExpense, setSelectedExpense] = useState<Expense | null>(null);
+  const [currentUser, setCurrentUser] = useState<{ id: string; name: string } | null>(null);
   const [menuAnchor, setMenuAnchor] = useState<null | HTMLElement>(null);
-  const [menuExpense, setMenuExpense] = useState<any>(null);
+  const [menuExpense, setMenuExpense] = useState<Expense | null>(null);
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
+
+  const loadFriend = useCallback(async () => {
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch(`/api/friends/${friendId}`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to load friend');
+      }
+
+      const data = await response.json();
+      setFriend(data.friend);
+      setExpenses(data.expenses as Expense[]);
+      setSettlements((data.settlements || []) as Settlement[]);
+    } catch (error) {
+      console.error('Failed to load friend:', error);
+      router.push('/friends');
+    } finally {
+      setLoading(false);
+    }
+  }, [friendId, router]);
 
   useEffect(() => {
     const token = localStorage.getItem('token');
@@ -78,36 +95,10 @@ export default function FriendDetailPage() {
       router.push('/login');
       return;
     }
-
     loadFriend();
-  }, [friendId]);
+  }, [friendId, router, loadFriend]);
 
-  const loadFriend = async () => {
-    try {
-      const token = localStorage.getItem('token');
-      const response = await fetch(`/api/friends/${friendId}`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to load friend');
-      }
-
-      const data = await response.json();
-      setFriend(data.friend);
-      setExpenses(data.expenses);
-      setSettlements(data.settlements || []);
-    } catch (error) {
-      console.error('Failed to load friend:', error);
-      router.push('/friends');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleAddExpense = async (expenseData: any) => {
+  const handleAddExpense = async (expenseData: Record<string, unknown>) => {
     const token = localStorage.getItem('token');
     const response = await fetch('/api/expenses', {
       method: 'POST',
@@ -126,7 +117,7 @@ export default function FriendDetailPage() {
     loadFriend();
   };
 
-  const handleEditExpense = async (expenseId: string, data: any) => {
+  const handleEditExpense = async (expenseId: string, data: Partial<Expense>) => {
     await expensesApi.update(expenseId, data);
     loadFriend();
   };
@@ -141,16 +132,17 @@ export default function FriendDetailPage() {
       setDeleteConfirmOpen(false);
       setSelectedExpense(null);
       loadFriend();
-    } catch (err: any) {
-      setError(err.message);
+  } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Something went wrong';
+      setError(message);
     } finally {
       setSubmitting(false);
     }
   };
 
-  const handleMenuOpen = (event: React.MouseEvent<HTMLElement>, expense: any) => {
+  const handleMenuOpen = (event: React.MouseEvent<HTMLElement>, expense: unknown) => {
     setMenuAnchor(event.currentTarget);
-    setMenuExpense(expense);
+    setMenuExpense(expense as Expense);
   };
 
   const handleMenuClose = () => {
@@ -175,15 +167,14 @@ export default function FriendDetailPage() {
     if (!expenses || !friend) return 0;
 
     let balance = 0;
-    const token = localStorage.getItem('token');
-    // TODO: Get actual user ID from token
     
     expenses.forEach((expense) => {
-      expense.splits.forEach((split: any) => {
+      expense.splits.forEach((split) => {
         if (!split.settled) {
           if (split.userId !== expense.createdById) {
             // Someone owes the person who paid
-            if (split.user.id === friend.id) {
+            const splitUserId = (split as { user?: { id?: string } }).user?.id;
+            if (splitUserId === friend.id) {
               // Friend owes user
               balance += split.amount;
             } else {
@@ -316,65 +307,15 @@ export default function FriendDetailPage() {
           <Stack spacing={2}>
             {/* Merge expenses and settlements */}
             {[
-              ...expenses.map((e: any) => ({ ...e, type: 'expense', date: new Date(e.date) })),
-              ...settlements.map((s: any) => ({ ...s, type: 'settlement', date: new Date(s.settledAt) })),
+              ...expenses.map((e: Expense) => ({ ...e, type: 'expense' as const, date: new Date(String(e.date)) })),
+              ...settlements.map((s: Settlement) => ({ ...s, type: 'settlement' as const, date: new Date(String(s.settledAt)) })),
             ]
               .sort((a, b) => b.date.getTime() - a.date.getTime())
-              .map((item: any) =>
+              .map((item) =>
                 item.type === 'expense' ? (
-                  <Card key={`expense-${item.id}`}>
-                    <CardContent>
-                      <Stack direction="row" justifyContent="space-between" alignItems="start">
-                        <Box sx={{ flex: 1 }}>
-                          <Typography variant="h6" fontWeight={600}>
-                            {item.description}
-                          </Typography>
-                          <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
-                            Paid by {item.createdBy.name} • {formatDate(item.date)}
-                          </Typography>
-                          <Stack direction="row" spacing={1} sx={{ mt: 1 }}>
-                            <Chip label={item.category} size="small" />
-                            <Chip label={formatSplitMethod(item.splitMethod)} size="small" variant="outlined" />
-                          </Stack>
-                        </Box>
-                        <Stack direction="row" alignItems="center" spacing={1}>
-                          <Typography variant="h5" fontWeight={700} color="primary.main">
-                            {formatCurrency(item.amount)}
-                          </Typography>
-                          {item.createdById === currentUser?.id && (
-                            <IconButton
-                              size="small"
-                              onClick={(e) => handleMenuOpen(e, item)}
-                            >
-                              <MoreVert />
-                            </IconButton>
-                          )}
-                        </Stack>
-                      </Stack>
-                    </CardContent>
-                  </Card>
+                  <ExpenseCard key={`expense-${item.id}`} item={item} currentUserId={currentUser?.id} onMenuOpen={handleMenuOpen} />
                 ) : (
-                  <Card key={`settlement-${item.id}`} sx={{ bgcolor: 'success.50', borderLeft: 4, borderColor: 'success.main' }}>
-                    <CardContent>
-                      <Stack direction="row" justifyContent="space-between" alignItems="start">
-                        <Box sx={{ flex: 1 }}>
-                          <Stack direction="row" alignItems="center" spacing={1}>
-                            <CheckCircle color="success" />
-                            <Typography variant="h6" fontWeight={600} color="success.dark">
-                              Payment recorded
-                            </Typography>
-                          </Stack>
-                          <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
-                            {item.fromUser.name} paid {item.toUser.name} • {formatDate(item.date)}
-                          </Typography>
-                          <Chip label="Settlement" size="small" color="success" sx={{ mt: 1 }} />
-                        </Box>
-                        <Typography variant="h5" fontWeight={700} color="success.main">
-                          {formatCurrency(item.amount)}
-                        </Typography>
-                      </Stack>
-                    </CardContent>
-                  </Card>
+                  <SettlementCard key={`settlement-${item.id}`} item={item} />
                 )
               )}
           </Stack>

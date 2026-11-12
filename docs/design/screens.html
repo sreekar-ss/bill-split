@@ -1,0 +1,928 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BillSplit MVP1 Screens</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400..700&display=swap" rel="stylesheet">
+<style>
+/* ---------- Tokens (DESIGN.md) ---------- */
+:root {
+  --paper: #F2F5F1;
+  --surface: #FFFFFF;
+  --ink: #13213F;
+  --ink-muted: #55627A;
+  --rule: #D3DCD4;
+  --owed: #0B7A5C;
+  --owe: #B3243F;
+  --highlight: #F4D94A;
+  --focus: #2F6FEB;
+  /* Proposed additions (see report) */
+  --on-highlight: #13213F;   /* add-button text, fixed in both themes */
+  --field: #7F8C9F;          /* input / checkbox borders, 3:1 on surface */
+  --avatar: #E4E9EF;
+  --scrim: rgb(19 33 63 / 0.42);
+  --shadow: 0 8px 24px rgb(19 33 63 / 0.14);
+  /* Showcase page only */
+  --canvas: #E2E8E3;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #0E1524;
+    --surface: #16203A;
+    --ink: #E6ECF5;
+    --ink-muted: #9AA7BD;
+    --rule: #26314D;
+    --owed: #3CC79B;
+    --owe: #FF7A93;
+    --highlight: #F4D94A;
+    --focus: #7AA5FF;
+    --on-highlight: #13213F;
+    --field: #66779A;
+    --avatar: #24304F;
+    --scrim: rgb(3 6 14 / 0.62);
+    --shadow: 0 8px 24px rgb(0 0 0 / 0.45);
+    --canvas: #070B14;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --paper: #0E1524;
+  --surface: #16203A;
+  --ink: #E6ECF5;
+  --ink-muted: #9AA7BD;
+  --rule: #26314D;
+  --owed: #3CC79B;
+  --owe: #FF7A93;
+  --highlight: #F4D94A;
+  --focus: #7AA5FF;
+  --on-highlight: #13213F;
+  --field: #66779A;
+  --avatar: #24304F;
+  --scrim: rgb(3 6 14 / 0.62);
+  --shadow: 0 8px 24px rgb(0 0 0 / 0.45);
+  --canvas: #070B14;
+  color-scheme: dark;
+}
+
+/* ---------- Base ---------- */
+*, *::before, *::after { box-sizing: border-box; }
+* { margin: 0; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  font-family: "Hanken Grotesk", system-ui, sans-serif;
+  font-size: 1rem;
+  line-height: 1.5;
+  background: var(--canvas);
+  color: var(--ink);
+  overflow-x: hidden;
+}
+h1, h2, h3 { line-height: 1.15; }
+button, input, select { font: inherit; color: inherit; }
+a { color: inherit; }
+:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.num { font-variant-numeric: tabular-nums; }
+.ic { width: 22px; height: 22px; flex: none; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.ic-sm { width: 18px; height: 18px; }
+.vh { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+/* ---------- Showcase page ---------- */
+.page { max-width: 1360px; margin: 0 auto; padding: 24px 16px 80px; }
+@media (min-width: 768px) { .page { padding: 40px 32px 96px; } }
+.intro { display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-start; justify-content: space-between; margin-bottom: 40px; }
+.intro h1 { font-size: 1.625rem; font-weight: 700; letter-spacing: -0.01em; }
+.intro p { max-width: 64ch; color: var(--ink-muted); margin-top: 8px; }
+.toggle { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 14px; border-radius: 10px; border: 1px solid var(--field); background: var(--surface); font-weight: 600; font-size: .9375rem; cursor: pointer; }
+.group-title { font-size: 1.25rem; font-weight: 600; margin: 8px 0 20px; }
+.group-title span { font-weight: 400; color: var(--ink-muted); }
+.grid { display: flex; flex-wrap: wrap; gap: 48px 32px; align-items: flex-start; margin-bottom: 64px; }
+.shot { flex: 0 1 390px; min-width: 0; }
+.shot.inset { flex: 0 1 240px; }
+.shot.wide { flex: 1 1 100%; }
+.shot figcaption { margin-top: 14px; font-size: .9375rem; font-weight: 600; }
+.shot figcaption span { display: block; font-weight: 400; color: var(--ink-muted); font-size: .8125rem; margin-top: 2px; max-width: 46ch; }
+.frame-wrap { position: relative; width: 100%; }
+.device { position: absolute; top: 0; left: 0; transform-origin: 0 0; transform: scale(var(--s, 1)); }
+.specs { max-width: 760px; }
+.specs h2 { font-size: 1.25rem; font-weight: 600; margin-bottom: 8px; }
+.specs dl { display: grid; grid-template-columns: minmax(0, 9rem) minmax(0, 1fr); gap: 0 16px; font-size: .9375rem; }
+.specs dt, .specs dd { padding: 10px 0; border-bottom: 1px solid var(--rule); }
+.specs dt { font-weight: 600; }
+.specs dd { color: var(--ink-muted); }
+
+/* ---------- App surfaces ---------- */
+.phone {
+  width: 390px; height: 844px; position: relative; overflow: hidden;
+  border-radius: 44px; border: 1px solid var(--rule);
+  background: var(--paper); color: var(--ink);
+  box-shadow: 0 1px 2px rgb(19 33 63 / .06), 0 20px 48px rgb(19 33 63 / .12);
+}
+.status { height: 47px; display: flex; align-items: center; justify-content: space-between; padding: 4px 30px 0 34px; font-size: 15px; font-weight: 600; }
+.status .sb { display: flex; gap: 6px; align-items: center; }
+.status svg { fill: currentColor; }
+.screen { position: absolute; top: 47px; left: 0; right: 0; bottom: 0; padding: 0 16px 120px; overflow: hidden; }
+.screen.no-nav { padding-bottom: 40px; }
+
+/* App header */
+.apphead { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 60px; }
+.apphead h1, .h-page { font-size: 1.625rem; font-weight: 700; letter-spacing: -0.01em; }
+.back { display: inline-flex; align-items: center; gap: 2px; min-height: 44px; margin-left: -10px; padding: 0 8px 0 2px; border-radius: 10px; text-decoration: none; font-size: .9375rem; font-weight: 500; color: var(--ink); }
+.topbar { display: flex; align-items: center; justify-content: space-between; min-height: 48px; }
+.sub { color: var(--ink-muted); font-size: .9375rem; }
+
+/* Section heads */
+.sh { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin: 28px 0 2px; }
+.sh h2 { font-size: 1.25rem; font-weight: 600; }
+.link { display: inline-flex; align-items: center; min-height: 44px; font-size: .9375rem; font-weight: 500; text-decoration: underline; text-underline-offset: 3px; text-decoration-color: var(--field); border-radius: 6px; }
+
+/* Avatars */
+.av { width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; flex: none; background: var(--avatar); color: var(--ink); font-weight: 600; font-size: .9375rem; }
+.av.me { background: var(--ink); color: var(--surface); }
+.av.lg { width: 56px; height: 56px; font-size: 1.25rem; }
+.av-btn { width: 44px; height: 44px; display: grid; place-items: center; border-radius: 50%; text-decoration: none; }
+
+/* Summary panel */
+.panel { background: var(--surface); border: 1px solid var(--rule); border-radius: 20px; padding: 18px 20px 20px; }
+.panel .lbl { font-size: .9375rem; color: var(--ink-muted); }
+.hero { font-size: 2.5rem; font-weight: 700; letter-spacing: -0.02em; line-height: 1.15; }
+.pair { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--rule); }
+.fig { font-size: 1.25rem; font-weight: 700; letter-spacing: -0.01em; line-height: 1.3; }
+.panel .note { margin-top: 6px; font-size: .8125rem; color: var(--ink-muted); }
+
+.owed { color: var(--owed); }
+.owe { color: var(--owe); }
+.muted { color: var(--ink-muted); }
+
+/* Balance beam */
+.beam { list-style: none; padding: 0; }
+.beam li { padding: 8px 0 9px; }
+.beam .top { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; font-size: .9375rem; }
+.beam .who { font-weight: 600; }
+.beam .what { text-align: right; }
+.beam .what b { font-weight: 700; }
+.track { position: relative; height: 8px; margin-top: 7px; background: linear-gradient(var(--rule), var(--rule)) center / 100% 2px no-repeat; }
+.track::before { content: ""; position: absolute; left: 50%; top: -4px; bottom: -4px; width: 1px; margin-left: -.5px; background: var(--ink-muted); }
+.bar { position: absolute; top: 0; height: 8px; width: calc(var(--w) * 0.5); animation: grow .3s ease-out both; }
+.bar.pos { left: 50%; background: var(--owed); border-radius: 0 3px 3px 0; transform-origin: left center; }
+.bar.neg { right: 50%; background: var(--owe); border-radius: 3px 0 0 3px; transform-origin: right center; }
+@keyframes grow { from { transform: scaleX(0); } }
+
+/* Ledger */
+.ledger { list-style: none; padding: 0; }
+.month { font-size: .9375rem; font-weight: 600; color: var(--ink-muted); padding: 22px 0 6px; border-bottom: 1px solid var(--rule); }
+.row { display: grid; grid-template-columns: 40px minmax(0, 1fr) auto; align-items: center; gap: 12px; min-height: 64px; padding: 10px 0; border-bottom: 1px solid var(--rule); text-decoration: none; color: inherit; }
+.row.av-lead { grid-template-columns: 40px minmax(0, 1fr) auto; }
+.date { text-align: center; line-height: 1.1; }
+.date .m { display: block; font-size: .8125rem; color: var(--ink-muted); }
+.date .d { display: block; font-size: 1.25rem; font-weight: 600; font-variant-numeric: tabular-nums; }
+.row .t { font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.row .meta { font-size: .8125rem; color: var(--ink-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.stake { text-align: right; line-height: 1.3; min-width: 84px; }
+.stake .l { display: block; font-size: .8125rem; }
+.stake .a { display: block; font-weight: 700; font-variant-numeric: tabular-nums; }
+.stake.only { font-size: .8125rem; color: var(--ink-muted); }
+
+/* Settle plan */
+.plan { list-style: none; padding: 0; }
+.plan li { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 64px; padding: 10px 0; border-bottom: 1px solid var(--rule); }
+.plan .t { font-size: .9375rem; }
+.plan .a { font-weight: 700; font-size: 1.125rem; font-variant-numeric: tabular-nums; letter-spacing: -0.01em; }
+.plan-note { font-size: .8125rem; color: var(--ink-muted); margin-top: 2px; }
+
+/* Buttons */
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 44px; padding: 0 16px; border-radius: 10px; border: 1px solid transparent; font-weight: 600; font-size: .9375rem; text-decoration: none; cursor: pointer; white-space: nowrap; background: none; }
+.btn-primary { background: var(--ink); color: var(--surface); }
+.btn-secondary { border-color: var(--field); color: var(--ink); background: transparent; }
+.btn-add { background: var(--highlight); color: var(--on-highlight); }
+.btn-block { width: 100%; min-height: 48px; font-size: 1rem; }
+.btn[aria-disabled="true"] { opacity: .42; cursor: not-allowed; }
+.iconbtn { width: 44px; height: 44px; display: grid; place-items: center; border-radius: 10px; border: 0; background: none; cursor: pointer; color: var(--ink); }
+.fab { position: absolute; right: 16px; bottom: 100px; z-index: 3; height: 52px; padding: 0 22px 0 16px; border-radius: 26px; font-size: 1rem; box-shadow: var(--shadow); }
+
+/* Tab bar */
+.tabbar { position: absolute; left: 0; right: 0; bottom: 0; z-index: 2; height: 84px; padding-bottom: 24px; display: grid; grid-template-columns: repeat(5, 1fr); background: var(--paper); border-top: 1px solid var(--rule); }
+.tab { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; min-height: 60px; text-decoration: none; font-size: .8125rem; font-weight: 500; color: var(--ink-muted); }
+.tab[aria-current="page"] { color: var(--ink); font-weight: 700; }
+.tab[aria-current="page"]::before { content: ""; position: absolute; top: -1px; left: 22%; right: 22%; height: 3px; border-radius: 0 0 3px 3px; background: var(--ink); }
+.homebar { position: absolute; left: 50%; bottom: 8px; width: 134px; height: 5px; margin-left: -67px; border-radius: 3px; background: var(--ink); z-index: 6; }
+
+/* Forms */
+.field { display: block; margin-top: 16px; }
+.field > .lab { display: block; font-size: .9375rem; font-weight: 500; margin-bottom: 6px; }
+.field > .help { display: block; font-size: .8125rem; color: var(--ink-muted); margin-top: 6px; }
+.input { display: block; width: 100%; min-height: 48px; padding: 0 12px; border: 1px solid var(--field); border-radius: 10px; background: var(--surface); color: var(--ink); font-size: 1rem; }
+.input:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; border-color: var(--focus); }
+.inwrap { position: relative; display: block; }
+.inwrap .ic { position: absolute; right: 12px; top: 50%; margin-top: -9px; pointer-events: none; color: var(--ink-muted); }
+.inwrap select.input, .inwrap .input.has-icon { padding-right: 40px; appearance: none; -webkit-appearance: none; }
+.inwrap .eye { position: absolute; right: 2px; top: 2px; }
+.inwrap .eye .ic { position: static; margin: 0; color: var(--ink); }
+.money { display: flex; align-items: center; min-height: 64px; padding: 0 14px; border: 1px solid var(--field); border-radius: 10px; background: var(--surface); }
+.money:focus-within { outline: 2px solid var(--focus); outline-offset: 1px; border-color: var(--focus); }
+.money .cur { font-size: 1.625rem; font-weight: 600; color: var(--ink-muted); margin-right: 4px; }
+.money input { border: 0; background: none; outline: none; width: 100%; font-size: 2rem; font-weight: 700; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+.cols2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.cols2 .field { min-width: 0; }
+
+/* Segmented control */
+.seg { display: grid; grid-template-columns: repeat(4, 1fr); gap: 2px; padding: 3px; border: 1px solid var(--rule); border-radius: 10px; background: var(--paper); }
+.seg.three { grid-template-columns: repeat(3, 1fr); }
+.seg button { min-height: 44px; border: 1px solid transparent; border-radius: 8px; background: none; font-size: .9375rem; font-weight: 500; color: var(--ink-muted); cursor: pointer; }
+.seg button[aria-checked="true"] { background: var(--surface); border-color: var(--ink); color: var(--ink); font-weight: 700; }
+
+/* Split editor */
+.splitlist { list-style: none; padding: 0; margin-top: 6px; }
+.sp { display: grid; grid-template-columns: 44px minmax(0, 1fr) 116px; align-items: center; gap: 8px; min-height: 54px; border-bottom: 1px solid var(--rule); }
+.check { width: 44px; height: 44px; display: grid; place-items: center; border-radius: 10px; }
+.check span { width: 22px; height: 22px; border-radius: 6px; border: 1.5px solid var(--field); display: grid; place-items: center; }
+.check.on span { background: var(--ink); border-color: var(--ink); color: var(--surface); }
+.check .ic { width: 15px; height: 15px; stroke-width: 3; }
+.sp .nm { font-weight: 500; }
+.sp .input { min-height: 44px; text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; }
+.remain { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 12px; font-size: .9375rem; }
+.remain .left { display: inline-flex; align-items: center; gap: 6px; color: var(--owe); font-weight: 700; }
+
+/* Sheet */
+.scrim { position: absolute; inset: 0; background: var(--scrim); z-index: 4; }
+.sheet { position: absolute; left: 0; right: 0; bottom: 0; z-index: 5; display: flex; flex-direction: column; background: var(--surface); border-radius: 20px 20px 0 0; box-shadow: var(--shadow); }
+.grab { width: 36px; height: 4px; border-radius: 2px; background: var(--field); opacity: .6; margin: 8px auto 0; flex: none; }
+.sheet-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 56px; padding: 0 6px 0 16px; flex: none; }
+.sheet-head h2 { font-size: 1.25rem; font-weight: 700; }
+.sheet-head p { font-size: .8125rem; color: var(--ink-muted); }
+.sheet-body { flex: 1; min-height: 0; overflow: hidden; padding: 0 16px 20px; }
+.sheet-body > .field:first-child { margin-top: 4px; }
+.sheet-foot { flex: none; padding: 12px 16px 36px; border-top: 1px solid var(--rule); background: var(--surface); }
+.callout { display: flex; gap: 10px; align-items: flex-start; padding: 12px 14px; border-radius: 10px; background: var(--paper); font-size: .9375rem; }
+.callout .ic { margin-top: 1px; color: var(--owed); }
+
+/* Settings rows */
+.setrows { list-style: none; padding: 0; }
+.setrows li { border-bottom: 1px solid var(--rule); }
+
+/* Empty state */
+.empty { padding: 40px 4px 0; }
+.empty h2 { font-size: 1.25rem; font-weight: 700; }
+.empty p { color: var(--ink-muted); margin: 6px 0 20px; max-width: 30ch; }
+
+/* ---------- Desktop ---------- */
+.desk { width: 1280px; height: 880px; position: relative; overflow: hidden; border-radius: 14px; border: 1px solid var(--rule); background: var(--paper); color: var(--ink); display: grid; grid-template-columns: 240px minmax(0, 1fr) 368px; box-shadow: 0 1px 2px rgb(19 33 63 / .06), 0 20px 48px rgb(19 33 63 / .12); }
+.rail { border-right: 1px solid var(--rule); padding: 24px 16px; display: flex; flex-direction: column; }
+.wordmark { font-size: 1.25rem; font-weight: 700; letter-spacing: -0.02em; padding: 0 12px; min-height: 44px; display: flex; align-items: center; }
+.rail nav { margin-top: 20px; display: grid; gap: 2px; }
+.rail a.ri { display: flex; align-items: center; gap: 12px; min-height: 44px; padding: 0 12px; border-radius: 10px; text-decoration: none; font-weight: 500; color: var(--ink-muted); }
+.rail a.ri[aria-current="page"] { background: var(--surface); color: var(--ink); font-weight: 700; box-shadow: inset 3px 0 0 var(--ink); }
+.rail .me-card { margin-top: auto; display: flex; gap: 10px; align-items: center; padding: 8px 12px; }
+.rail .me-card .n { font-weight: 600; font-size: .9375rem; line-height: 1.3; }
+.rail .me-card .e { font-size: .8125rem; color: var(--ink-muted); }
+.dmain { padding: 28px 24px 24px 32px; min-width: 0; }
+.dmain-inner { max-width: 720px; }
+.dhead { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; padding-bottom: 8px; }
+.dhead .actions { display: flex; gap: 12px; }
+.dside { border-left: 1px solid var(--rule); padding: 28px 24px; }
+.desk .row { min-height: 60px; }
+.total { margin-top: 20px; font-size: .9375rem; color: var(--ink-muted); }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+}
+</style>
+</head>
+<body>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+  <defs>
+    <symbol id="i-home" viewBox="0 0 24 24"><path d="M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8"/><path d="M3 10a2 2 0 0 1 .709-1.528l7-5.999a2 2 0 0 1 2.582 0l7 5.999A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></symbol>
+    <symbol id="i-users" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></symbol>
+    <symbol id="i-user" viewBox="0 0 24 24"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></symbol>
+    <symbol id="i-activity" viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></symbol>
+    <symbol id="i-account" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="10" r="3"/><path d="M7 20.662V19a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v1.662"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24"><path d="M5 12h14"/><path d="M12 5v14"/></symbol>
+    <symbol id="i-chev-left" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></symbol>
+    <symbol id="i-chev-down" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
+    <symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></symbol>
+    <symbol id="i-alert" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" x2="12" y1="8" y2="12"/><line x1="12" x2="12.01" y1="16" y2="16"/></symbol>
+    <symbol id="i-user-plus" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" x2="19" y1="8" y2="14"/><line x1="22" x2="16" y1="11" y2="11"/></symbol>
+    <symbol id="i-more" viewBox="0 0 24 24"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></symbol>
+    <symbol id="i-eye" viewBox="0 0 24 24"><path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"/><circle cx="12" cy="12" r="3"/></symbol>
+    <symbol id="i-logout" viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" x2="9" y1="12" y2="12"/></symbol>
+    <symbol id="i-calendar" viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M16 2v4"/><path d="M8 2v4"/><path d="M3 10h18"/></symbol>
+    <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></symbol>
+    <symbol id="i-moon" viewBox="0 0 24 24"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></symbol>
+    <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></symbol>
+    <symbol id="sb-signal" viewBox="0 0 18 12"><rect x="0" y="8" width="3" height="4" rx="1"/><rect x="5" y="5.5" width="3" height="6.5" rx="1"/><rect x="10" y="3" width="3" height="9" rx="1"/><rect x="15" y="0" width="3" height="12" rx="1"/></symbol>
+    <symbol id="sb-batt" viewBox="0 0 27 13"><rect x=".5" y=".5" width="23" height="12" rx="3.5" fill="none" stroke="currentColor" opacity=".45"/><rect x="2" y="2" width="18" height="9" rx="2"/><rect x="25" y="4.5" width="1.5" height="4" rx=".75" opacity=".45"/></symbol>
+  </defs>
+</svg>
+
+<main class="page">
+  <header class="intro">
+    <div>
+      <h1>BillSplit MVP1 screens</h1>
+      <p>High-fidelity reference for the build. Sample data: the Lisbon trip group (Ana, Ben, Chloe, Dev) and Ana's friend Maya, seen as Ana. Every figure reconciles: group balances sum to zero and the settle-up plan clears them.</p>
+    </div>
+    <button class="toggle" id="themeToggle" type="button" aria-pressed="false">
+      <svg class="ic ic-sm" aria-hidden="true"><use href="#i-moon"/></svg><span>Dark theme</span>
+    </button>
+  </header>
+
+  <h2 class="group-title">Phone <span>390 × 844</span></h2>
+  <div class="grid">
+
+    <!-- 1. Sign in -->
+    <figure class="shot">
+      <div class="frame-wrap" data-w="390" data-h="844"><div class="device">
+        <div class="phone">
+          <div class="status" aria-hidden="true"><span>9:41</span><span class="sb"><svg width="18" height="12"><use href="#sb-signal"/></svg><svg width="27" height="13"><use href="#sb-batt"/></svg></span></div>
+          <div class="screen no-nav">
+            <div class="wordmark" style="padding:0;margin-top:12px">BillSplit</div>
+            <div style="margin-top:96px">
+              <h1 class="h-page">Sign in</h1>
+              <p class="sub" style="margin-top:8px;max-width:32ch">Log what you paid, split it, and see who owes whom.</p>
+            </div>
+            <form onsubmit="return false" style="margin-top:12px">
+              <label class="field"><span class="lab">Email</span>
+                <input class="input" type="email" value="ana@example.com" autocomplete="email">
+              </label>
+              <label class="field"><span class="lab">Password</span>
+                <span class="inwrap"><input class="input has-icon" type="password" value="lisbon-2026" autocomplete="current-password">
+                  <button class="iconbtn eye" type="button" aria-label="Show password"><svg class="ic ic-sm" aria-hidden="true"><use href="#i-eye"/></svg></button></span>
+              </label>
+              <button class="btn btn-primary btn-block" type="submit" style="margin-top:24px">Sign in</button>
+            </form>
+            <p class="sub" style="margin-top:20px">New to BillSplit? <a class="link" href="#" style="color:var(--ink)">Create an account</a></p>
+          </div>
+          <div class="homebar"></div>
+        </div>
+      </div></div>
+      <figcaption>1. Sign in<span>Email and password only. Errors sit under the field they belong to.</span></figcaption>
+    </figure>
+
+    <!-- 2a. Home -->
+    <figure class="shot">
+      <div class="frame-wrap" data-w="390" data-h="844"><div class="device">
+        <div class="phone">
+          <div class="status" aria-hidden="true"><span>9:41</span><span class="sb"><svg width="18" height="12"><use href="#sb-signal"/></svg><svg width="27" height="13"><use href="#sb-batt"/></svg></span></div>
+          <div class="screen">
+            <header class="apphead">
+              <h1>Home</h1>
+              <a class="av-btn" href="#" aria-label="Account"><span class="av me">A</span></a>
+            </header>
+            <section class="panel" aria-label="Your balance">
+              <div class="lbl">Overall, you're owed</div>
+              <div class="hero num owed">$206.90</div>
+              <div class="pair">
+                <div><div class="lbl">You're owed</div><div class="fig num owed">$289.10</div></div>
+                <div><div class="lbl">You owe</div><div class="fig num owe">$82.20</div></div>
+              </div>
+            </section>
+            <div class="sh"><h2>People</h2><a class="link" href="#">All friends</a></div>
+            <ul class="beam">
+              <li><div class="top"><span class="who">Chloe</span><span class="what owed">owes you <b class="num">$144.30</b></span></div><div class="track" aria-hidden="true"><span class="bar pos" style="--w:100%"></span></div></li>
+              <li><div class="top"><span class="who">Ben</span><span class="what owed">owes you <b class="num">$91.00</b></span></div><div class="track" aria-hidden="true"><span class="bar pos" style="--w:63.1%"></span></div></li>
+              <li><div class="top"><span class="who">Dev</span><span class="what owed">owes you <b class="num">$53.80</b></span></div><div class="track" aria-hidden="true"><span class="bar pos" style="--w:37.3%"></span></div></li>
+              <li><div class="top"><span class="who">Maya</span><span class="what owe">you owe <b class="num">$82.20</b></span></div><div class="track" aria-hidden="true"><span class="bar neg" style="--w:57%"></span></div></li>
+            </ul>
+            <div class="sh"><h2>Groups</h2><a class="link" href="#">All groups</a></div>
+            <ul class="ledger">
+              <li><a class="row" href="#"><span class="av">L</span><span><span class="t" style="display:block">Lisbon trip</span><span class="meta" style="display:block">4 people</span></span><span class="stake owed"><span class="l">you're owed</span><span class="a">$289.10</span></span></a></li>
+              <li><a class="row" href="#"><span class="av">F</span><span><span class="t" style="display:block">Flat 3B</span><span class="meta" style="display:block">2 people</span></span><span class="stake owe"><span class="l">you owe</span><span class="a">$30.00</span></span></a></li>
+            </ul>
+          </div>
+          <a class="btn btn-add fab" href="#"><svg class="ic" aria-hidden="true"><use href="#i-plus"/></svg>Add expense</a>
+          <nav class="tabbar" aria-label="Main">
+            <a class="tab" href="#" aria-current="page"><svg class="ic" aria-hidden="true"><use href="#i-home"/></svg>Home</a>
+            <a class="tab" href="#"><svg class="ic" aria-hidden="true"><use href="#i-users"/></svg>Groups</a>
+            <a class="tab" href="#"><svg class="ic" aria-hidden="true"><use href="#i-user"/></svg>Friends</a>
+            <a class="tab" href="#"><svg class="ic" aria-hidden="true"><use href="#i-activity"/></svg>Activity</a>
+            <a class="tab" href="#"><svg class="ic" aria-hidden="true"><use href="#i-account"/></svg>Account</a>
+          </nav>
+          <div class="homebar"></div>
+        </div>
+      </div></div>
+      <figcaption>2a. Home<span>Summary panel, then your net with each person as a balance beam (pairwise, across groups and direct expenses).</span></figcaption>
+    </figure>
+
+    <!-- 2b. Home scrolled -->
+    <figure class="shot">
+      <div class="frame-wrap" data-w="390" data-h="844"><div class="device">
+        <div class="phone">
+          <div class="status" aria-hidden="true"><span>9:41</span><span class="sb"><svg width="18" height="12"><use href="#sb-signal"/></svg><svg width="27" height="13"><use href="#sb-batt"/></svg></span></div>
+          <div class="screen">
+            <ul class="beam" style="margin-top:4px">
+              <li><div class="top"><span class="who">Maya</span><span class="what owe">you owe <b class="num">$82.20</b></span></div><div class="track" aria-hidden="true"><span class="bar neg" style="--w:57%"></span></div></li>
+            </ul>
+            <div class="sh"><h2>Groups</h2><a class="link" href="#">All groups</a></div>
+            <ul class="ledger">
+              <li><a class="row" href="#"><span class="av">L</span><span><span class="t" style="display:block">Lisbon trip</span><span class="meta" style="display:block">4 people</span></span><span class="stake owed"><span class="l">you're owed</span><span class="a">$289.10</span></span></a></li>
+              <li><a class="row" href="#"><span class="av">F</span><span><span class="t" style="display:block">Flat 3B</span><span class="meta" style="display:block">2 people</span></span><span class="stake owe"><span class="l">you owe</span><span class="a">$30.00</span></span></a></li>
+              <li><a class="row" href="#"><span class="av">S</span><span><span class="t" style="display:block">Sunday 5-a-side</span><span class="meta" style="display:block">3 people</span></span><span class="stake only">settled up</span></a></li>
+            </ul>
+            <div class="sh"><h2>Recent activity</h2><a class="link" href="#">All activity</a></div>
+            <ul class="ledger">
+              <li><a class="row" href="#"><span class="date"><span class="m">Nov</span><span class="d">10</span></span><span><span class="t" style="display:block">You paid Maya</span><span class="meta" style="display:block">Payment, direct</span></span><span class="stake"><span class="l muted">payment</span><span class="a">$20.00</span></span></a></li>
+              <li><a class="row" href="#"><span class="date"><span class="m">Nov</span><span class="d">9</span></span><span><span class="t" style="display:block">Concert tickets</span><span class="meta" style="display:block">Maya paid $130.00, direct</span></span><span class="stake owe"><span class="l">you borrowed</span><span class="a">$65.00</span></span></a></li>
+              <li><a class="row" href="#"><span class="date"><span class="m">Nov</span><span class="d">6</span></span><span><span class="t" style="display:block">Internet, November</span><span class="meta" style="display:block">Maya paid $60.00 in Flat 3B</span></span><span class="stake owe"><span class="l">you borrowed</span><span class="a">$30.00</span></span></a></li>
+              <li><a class="row" href="#"><span class="date"><span class="m">Nov</span><span class="d">4</span></span><span><span class="t" style="display:block">Dev paid you</span><span class="meta" style="display:block">Payment in Lisbon trip</span></span><span class="stake"><span class="l muted">payment</span><span class="a">$100.00</span></span></a></li>
+            </ul>
+          </div>
+          <a class="btn btn-add fab" href="#"><svg class="ic" aria-hidden="true"><use href="#i-plus"/></svg>Add expense</a>
+          <nav class="tabbar" aria-label="Main">
+            <a class="tab" href="#" aria-current="page"><svg class="ic" aria-hidden="true"><use href="#i-home"/></svg>Home</a>
+            <a class="tab" href="#"><svg class="ic" aria-hidden="true"><use href="#i-users"/></svg>Groups</a>
+            <a class="tab" href="#"><svg class="ic" aria-hidden="true"><use href="#i-user"/></svg>Friends</a>
+            <a class="tab" href="#"><svg class="ic" aria-hidden="true"><use href="#i-activity"/></svg>Activity</a>
+            <a class="tab" href="#"><svg class="ic" aria-hidden="true"><use href="#i-account"/></svg>Account</a>
+          </nav>
+          <div class="homebar"></div>
+        </div>
+      </div></div>
+      <figcaption>2b. Home, scrolled<span>Groups with your stake in each, then the four latest items from Activity.</span></figcaption>
+    </figure>
+
+    <!-- 3a. Groups -->
+    <figure class="shot">
+      <div class="frame-wrap" data-w="390" data-h="844"><div class="device">
+        <div class="phone">
+          <div class="status" aria-hidden="true"><span>9:41</span><span class="sb"><svg width="18" height="12"><use href="#sb-signal"/></svg><svg width="27" height="13"><use href="#sb-batt"/></svg></span></div>
+          <div class="screen">
+            <header class="apphead">
+              <h1>Groups</h1>
+              <a class="btn btn-secondary" href="#"><svg class="ic ic-sm" aria-hidden="true"><use href="#i-plus"/></svg>New group</a>
+            </header>
+            <ul class="ledger" style="border-top:1px solid var(--rule);margin-top:8px">
+              <li><a class="row" href="#"><span class="av">L</span><span><span class="t" style="display:block">Lisbon trip</span><span class="meta" style="display:block">Ana, Ben, Chloe and Dev</span></span><span class="stake owed"><span class="l">you're owed</span><span class="a">$289.10</span></span></a></li>
+              <li><a class="row" href="#"><span class="av">F</span><span><span class="t" style="display:block">Flat 3B</span><span class="meta" style="display:block">Ana and Maya</span></span><span class="stake owe"><span class="l">you owe</span><span class="a">$30.00</span></span></a></li>
+              <li><a class="row" href="#"><span class="av">S</span><span><span class="t" style="display:block">Sunday 5-a-side</span><span class="meta" style="display:block">Ana, Ben and Dev</span></span><span class="stake only">settled up</span></a></li>
+            </ul>
+          </div>
+          <a class="btn btn-add fab" href="#"><svg class="ic" aria-hidden="true"><use href="#i-plus"/></svg>Add expense</a>
+          <nav class="tabbar" aria-label="Main">
+            <a class="tab" href="#"><svg class="ic" aria-hidden="true"><use href="#i-home"/></svg>Home</a>
+            <a class="tab" href="#" aria-current="page"><svg class="ic" aria-hidden="true"><use href="#i-users"/></svg>Groups</a>
+            <a class="tab" href="#"><svg class="ic" aria-hidden="true"><use href="#i-user"/></svg>Friends</a>
+            <a class="tab" href="#"><svg class="ic" aria-hidden="true"><use href="#i-activity"/></svg>Activity</a>
+            <a class="tab" href="#"><svg class="ic" aria-hidden="true"><use href="#i-account"/></svg>Account</a>
+          </nav>
+          <div class="homebar"></div>
+        </div>
+      </div></div>
+      <figcaption>3a. Groups<span>Ledger rows with members as meta and your stake on the right. Zero reads "settled up" in muted ink, never green.</span></figcaption>
+    </figure>
+
+    <!-- 3b. Groups empty (inset) -->
+    <figure class="shot inset">
+      <div class="frame-wrap" data-w="390" data-h="844"><div class="device">
+        <div class="phone">
+          <div class="status" aria-hidden="true"><span>9:41</span><span class="sb"><svg width="18" height="12"><use href="#sb-signal"/></svg><svg width="27" height="13"><use href="#sb-batt"/></svg></span></div>
+          <div class="screen">
+            <header class="apphead"><h1>Groups</h1></header>
+            <div class="empty">
+              <h2>No groups yet</h2>
+              <p>Make one for a trip, a flat or a team, and we'll keep the tally.</p>
+              <a class="btn btn-primary" href="#"><svg class="ic ic-sm" aria-hidden="true"><use href="#i-plus"/></svg>New group</a>
+            </div>
+          </div>
+          <nav class="tabbar" aria-label="Main">
+            <a class="tab" href="#"><svg class="ic" aria-hidden="true"><use href="#i-home"/></svg>Home</a>
+            <a class="tab" href="#" aria-current="page"><svg class="ic" aria-hidden="true"><use href="#i-users"/></svg>Groups</a>
+            <a class="tab" href="#"><svg class="ic" aria-hidden="true"><use href="#i-user"/></svg>Friends</a>
+            <a class="tab" href="#"><svg class="ic" aria-hidden="true"><use href="#i-activity"/></svg>Activity</a>
+            <a class="tab" href="#"><svg class="ic" aria-hidden="true"><use href="#i-account"/></svg>Account</a>
+          </nav>
+          <div class="homebar"></div>
+        </div>
+      </div></div>
+      <figcaption>3b. Groups, empty<span>The pill is hidden until there's a group or friend to split with.</span></figcaption>
+    </figure>
+
+    <!-- 4a. Group detail -->
+    <figure class="shot">
+      <div class="frame-wrap" data-w="390" data-h="844"><div class="device">
+        <div class="phone">
+          <div class="status" aria-hidden="true"><span>9:41</span><span class="sb"><svg width="18" height="12"><use href="#sb-signal"/></svg><svg width="27" height="13"><use href="#sb-batt"/></svg></span></div>
+          <div class="screen">
+            <div class="topbar">
+              <a class="back" href="#"><svg class="ic" aria-hidden="true"><use href="#i-chev-left"/></svg>Groups</a>
+              <span style="display:flex;margin-right:-10px">
+                <button class="iconbtn" type="button" aria-label="Add member"><svg class="ic" aria-hidden="true"><use href="#i-user-plus"/></svg></button>
+                <button class="iconbtn" type="button" aria-label="Group settings"><svg class="ic" aria-hidden="true"><use href="#i-more"/></svg></button>
+              </span>
+            </div>
+            <h1 class="h-page">Lisbon trip</h1>
+            <p class="sub" style="margin-top:4px">Ana, Ben, Chloe and Dev</p>
+            <div class="sh" style="margin-top:20px"><h2>Balances</h2><span class="sub num">$1,117.40 spent</span></div>
+            <ul class="beam">
+              <li><div class="top"><span class="who">You</span><span class="what owed">get back <b class="num">$289.10</b></span></div><div class="track" aria-hidden="true"><span class="bar pos" style="--w:100%"></span></div></li>
+              <li><div class="top"><span class="who">Ben</span><span class="what owed">gets back <b class="num">$111.30</b></span></div><div class="track" aria-hidden="true"><span class="bar pos" style="--w:38.5%"></span></div></li>
+              <li><div class="top"><span class="who">Dev</span><span class="what owe">owes <b class="num">$172.30</b></span></div><div class="track" aria-hidden="true"><span class="bar neg" style="--w:59.6%"></span></div></li>
+              <li><div class="top"><span class="who">Chloe</span><span class="what owe">owes <b class="num">$228.10</b></span></div><div class="track" aria-hidden="true"><span class="bar neg" style="--w:78.9%"></span></div></li>
+            </ul>
+            <div class="sh"><h2>Settle up</h2></div>
+            <p class="plan-note" style="margin-bottom:4px">3 payments settle everyone.</p>
+            <ul class="plan">
+              <li><span><span class="t" style="display:block">Chloe pays you</span><span class="a owed" style="display:block">$228.10</span></span><button class="btn btn-secondary" type="button">Record payment</button></li>
+              <li><span><span class="t" style="display:block">Dev pays Ben</span><span class="a" style="display:block">$111.30</span></span><button class="btn btn-secondary" type="button">Record payment</button></li>
+              <li><span><span class="t" style="display:block">Dev pays you</span><span class="a owed" style="display:block">$61.00</span></span><button class="btn btn-secondary" type="button">Record payment</button></li>
+            </ul>
+          </div>
+          <a class="btn btn-add fab" href="#"><svg class="ic" aria-hidden="true"><use href="#i-plus"/></svg>Add expense</a>
+          <nav class="tabbar" aria-label="Main">
+            <a class="tab" href="#"><svg class="ic" aria-hidden="true"><use href="#i-home"/></svg>Home</a>
+            <a class="tab" href="#" aria-current="page"><svg class="ic" aria-hidden="true"><use href="#i-users"/></svg>Groups</a>
+            <a class="tab" href="#"><svg class="ic" aria-hidden="true"><use href="#i-user"/></svg>Friends</a>
+            <a class="tab" href="#"><svg class="ic" aria-hidden="true"><use href="#i-activity"/></svg>Activity</a>
+            <a class="tab" href="#"><svg class="ic" aria-hidden="true"><use href="#i-account"/></svg>Account</a>
+          </nav>
+          <div class="homebar"></div>
+        </div>
+      </div></div>
+      <figcaption>4a. Group detail<span>Members' nets on the beam (they sum to zero), then the simplified plan: three transfers that clear them, each with Record payment.</span></figcaption>
+    </figure>
+
+    <!-- 4b. Group detail scrolled -->
+    <figure class="shot">
+      <div class="frame-wrap" data-w="390" data-h="844"><div class="device">
+        <div class="phone">
+          <div class="status" aria-hidden="true"><span>9:41</span><span class="sb"><svg width="18" height="12"><use href="#sb-signal"/></svg><svg width="27" height="13"><use href="#sb-batt"/></svg></span></div>
+          <div class="screen">
+            <div class="sh" style="margin-top:8px"><h2>Expenses</h2></div>
+            <ul class="ledger">
+              <li class="month">November 2026</li>
+              <li><a class="row" href="#"><span class="date"><span class="m">Nov</span><span class="d">4</span></span><span><span class="t" style="display:block">Dev paid you</span><span class="meta" style="display:block">Payment</span></span><span class="stake"><span class="l muted">payment</span><span class="a">$100.00</span></span></a></li>
+              <li><a class="row" href="#"><span class="date"><span class="m">Nov</span><span class="d">2</span></span><span><span class="t" style="display:block">Airport taxi</span><span class="meta" style="display:block">Chloe paid $38.00</span></span><span class="stake owe"><span class="l">you borrowed</span><span class="a">$9.50</span></span></a></li>
+              <li><a class="row" href="#"><span class="date"><span class="m">Nov</span><span class="d">1</span></span><span><span class="t" style="display:block">Fado night tickets</span><span class="meta" style="display:block">Ben paid $180.00</span></span><span class="stake owe"><span class="l">you borrowed</span><span class="a">$45.00</span></span></a></li>
+              <li class="month">October 2026</li>
+              <li><a class="row" href="#"><span class="date"><span class="m">Oct</span><span class="d">31</span></span><span><span class="t" style="display:block">Pastéis de Belém</span><span class="meta" style="display:block">Dev paid $18.60</span></span><span class="stake owe"><span class="l">you borrowed</span><span class="a">$6.20</span></span></a></li>
+              <li><a class="row" href="#"><span class="date"><span class="m">Oct</span><span class="d">30</span></span><span><span class="t" style="display:block">Sintra car hire</span><span class="meta" style="display:block">Ben paid $120.00</span></span><span class="stake only">not involved</span></a></li>
+              <li><a class="row" href="#"><span class="date"><span class="m">Oct</span><span class="d">29</span></span><span><span class="t" style="display:block">Tram 28 day passes</span><span class="meta" style="display:block">Chloe paid $24.80</span></span><span class="stake owe"><span class="l">you borrowed</span><span class="a">$6.20</span></span></a></li>
+              <li><a class="row" href="#"><span class="date"><span class="m">Oct</span><span class="d">28</span></span><span><span class="t" style="display:block">Dinner at Taberna da Rua</span><span class="meta" style="display:block">Ben paid $96.00</span></span><span class="stake owe"><span class="l">you borrowed</span><span class="a">$24.00</span></span></a></li>
+              <li><a class="row" href="#"><span class="date"><span class="m">Oct</span><span class="d">28</span></span><span><span class="t" style="display:block">Airbnb in Alfama</span><span class="meta" style="display:block">You paid $640.00</span></span><span class="stake owed"><span class="l">you lent</span><span class="a">$480.00</span></span></a></li>
+            </ul>
+          </div>
+          <a class="btn btn-add fab" href="#"><svg class="ic" aria-hidden="true"><use href="#i-plus"/></svg>Add expense</a>
+          <nav class="tabbar" aria-label="Main">
+            <a class="tab" href="#"><svg class="ic" aria-hidden="true"><use href="#i-home"/></svg>Home</a>
+            <a class="tab" href="#" aria-current="page"><svg class="ic" aria-hidden="true"><use href="#i-users"/></svg>Groups</a>
+            <a class="tab" href="#"><svg class="ic" aria-hidden="true"><use href="#i-user"/></svg>Friends</a>
+            <a class="tab" href="#"><svg class="ic" aria-hidden="true"><use href="#i-activity"/></svg>Activity</a>
+            <a class="tab" href="#"><svg class="ic" aria-hidden="true"><use href="#i-account"/></svg>Account</a>
+          </nav>
+          <div class="homebar"></div>
+        </div>
+      </div></div>
+      <figcaption>4b. Group detail, scrolled<span>The ledger, grouped by month, with payments as rows. The right column is always your own stake.</span></figcaption>
+    </figure>
+
+    <!-- 5. Add expense -->
+    <figure class="shot">
+      <div class="frame-wrap" data-w="390" data-h="844"><div class="device">
+        <div class="phone">
+          <div class="status" aria-hidden="true"><span>9:41</span><span class="sb"><svg width="18" height="12"><use href="#sb-signal"/></svg><svg width="27" height="13"><use href="#sb-batt"/></svg></span></div>
+          <div class="screen" aria-hidden="true">
+            <div class="topbar"><span class="back"><svg class="ic"><use href="#i-chev-left"/></svg>Groups</span></div>
+            <h1 class="h-page">Lisbon trip</h1>
+          </div>
+          <div class="scrim"></div>
+          <section class="sheet" role="dialog" aria-modal="true" aria-label="Add expense" style="top:50px">
+            <div class="grab" aria-hidden="true"></div>
+            <div class="sheet-head">
+              <div><h2>Add expense</h2><p>In Lisbon trip</p></div>
+              <button class="iconbtn" type="button" aria-label="Close"><svg class="ic" aria-hidden="true"><use href="#i-x"/></svg></button>
+            </div>
+            <div class="sheet-body">
+              <label class="field"><span class="lab">Amount</span>
+                <span class="money"><span class="cur" aria-hidden="true">$</span><input type="text" inputmode="decimal" value="86.40" aria-label="Amount in US dollars"></span>
+              </label>
+              <label class="field" style="margin-top:12px"><span class="lab">Description</span>
+                <input class="input" type="text" value="Dinner at Cervejaria Ramiro">
+              </label>
+              <div class="cols2">
+                <label class="field" style="margin-top:12px"><span class="lab">Paid by</span>
+                  <span class="inwrap"><select class="input"><option>You</option><option>Ben</option><option>Chloe</option><option>Dev</option></select><svg class="ic ic-sm" aria-hidden="true"><use href="#i-chev-down"/></svg></span>
+                </label>
+                <label class="field" style="margin-top:12px"><span class="lab">Date</span>
+                  <span class="inwrap"><input class="input has-icon num" type="text" value="Nov 2, 2026"><svg class="ic ic-sm" aria-hidden="true"><use href="#i-calendar"/></svg></span>
+                </label>
+              </div>
+              <div class="field" style="margin-top:14px">
+                <span class="lab" id="splitlab">Split</span>
+                <div class="seg" role="radiogroup" aria-labelledby="splitlab">
+                  <button type="button" role="radio" aria-checked="false">Equally</button>
+                  <button type="button" role="radio" aria-checked="true">Exact</button>
+                  <button type="button" role="radio" aria-checked="false">Percent</button>
+                  <button type="button" role="radio" aria-checked="false">Shares</button>
+                </div>
+              </div>
+              <ul class="splitlist">
+                <li class="sp"><span class="check on" role="checkbox" aria-checked="true" tabindex="0" aria-label="Include you"><span><svg class="ic" aria-hidden="true"><use href="#i-check"/></svg></span></span><span class="nm">You</span><input class="input" type="text" inputmode="decimal" value="$24.00" aria-label="Your share"></li>
+                <li class="sp"><span class="check on" role="checkbox" aria-checked="true" tabindex="0" aria-label="Include Ben"><span><svg class="ic" aria-hidden="true"><use href="#i-check"/></svg></span></span><span class="nm">Ben</span><input class="input" type="text" inputmode="decimal" value="$21.40" aria-label="Ben's share"></li>
+                <li class="sp"><span class="check on" role="checkbox" aria-checked="true" tabindex="0" aria-label="Include Chloe"><span><svg class="ic" aria-hidden="true"><use href="#i-check"/></svg></span></span><span class="nm">Chloe</span><input class="input" type="text" inputmode="decimal" value="$18.80" aria-label="Chloe's share"></li>
+                <li class="sp"><span class="check on" role="checkbox" aria-checked="true" tabindex="0" aria-label="Include Dev"><span><svg class="ic" aria-hidden="true"><use href="#i-check"/></svg></span></span><span class="nm">Dev</span><input class="input" type="text" inputmode="decimal" value="$19.00" aria-label="Dev's share"></li>
+              </ul>
+            </div>
+            <div class="sheet-foot">
+              <div class="remain" aria-live="polite">
+                <span class="left"><svg class="ic ic-sm" aria-hidden="true"><use href="#i-alert"/></svg><span class="num">$3.20 left to assign</span></span>
+                <span class="muted num">$83.20 of $86.40</span>
+              </div>
+              <button class="btn btn-primary btn-block" type="button" aria-disabled="true">Save expense</button>
+            </div>
+          </section>
+          <div class="homebar"></div>
+        </div>
+      </div></div>
+      <figcaption>5. Add expense, Exact split<span>Shares add to $83.20 of $86.40, so the footer shows what's left and Save stays disabled until it balances.</span></figcaption>
+    </figure>
+
+    <!-- 6. Settle up -->
+    <figure class="shot">
+      <div class="frame-wrap" data-w="390" data-h="844"><div class="device">
+        <div class="phone">
+          <div class="status" aria-hidden="true"><span>9:41</span><span class="sb"><svg width="18" height="12"><use href="#sb-signal"/></svg><svg width="27" height="13"><use href="#sb-batt"/></svg></span></div>
+          <div class="screen" aria-hidden="true">
+            <div class="topbar"><span class="back"><svg class="ic"><use href="#i-chev-left"/></svg>Groups</span></div>
+            <h1 class="h-page">Lisbon trip</h1>
+            <p class="sub" style="margin-top:4px">Ana, Ben, Chloe and Dev</p>
+            <div class="sh" style="margin-top:20px"><h2>Balances</h2><span class="sub num">$1,117.40 spent</span></div>
+            <ul class="beam">
+              <li><div class="top"><span class="who">You</span><span class="what owed">get back <b class="num">$289.10</b></span></div><div class="track"><span class="bar pos" style="--w:100%"></span></div></li>
+              <li><div class="top"><span class="who">Ben</span><span class="what owed">gets back <b class="num">$111.30</b></span></div><div class="track"><span class="bar pos" style="--w:38.5%"></span></div></li>
+              <li><div class="top"><span class="who">Dev</span><span class="what owe">owes <b class="num">$172.30</b></span></div><div class="track"><span class="bar neg" style="--w:59.6%"></span></div></li>
+            </ul>
+          </div>
+          <div class="scrim"></div>
+          <section class="sheet" role="dialog" aria-modal="true" aria-label="Settle up" style="top:336px">
+            <div class="grab" aria-hidden="true"></div>
+            <div class="sheet-head">
+              <div><h2>Settle up</h2><p>Record a payment in Lisbon trip</p></div>
+              <button class="iconbtn" type="button" aria-label="Close"><svg class="ic" aria-hidden="true"><use href="#i-x"/></svg></button>
+            </div>
+            <div class="sheet-body">
+              <div class="cols2">
+                <label class="field" style="margin-top:4px"><span class="lab">From</span>
+                  <span class="inwrap"><select class="input"><option>Chloe</option><option>Dev</option></select><svg class="ic ic-sm" aria-hidden="true"><use href="#i-chev-down"/></svg></span>
+                </label>
+                <label class="field" style="margin-top:4px"><span class="lab">To</span>
+                  <span class="inwrap"><select class="input"><option>You</option><option>Ben</option></select><svg class="ic ic-sm" aria-hidden="true"><use href="#i-chev-down"/></svg></span>
+                </label>
+              </div>
+              <label class="field" style="margin-top:12px"><span class="lab">Amount</span>
+                <span class="money"><span class="cur" aria-hidden="true">$</span><input type="text" inputmode="decimal" value="228.10" aria-label="Amount in US dollars"></span>
+                <span class="help">Chloe owes you $228.10. Paying part of it? Change the amount.</span>
+              </label>
+              <label class="field" style="margin-top:12px"><span class="lab">Date</span>
+                <span class="inwrap"><input class="input has-icon num" type="text" value="Nov 12, 2026"><svg class="ic ic-sm" aria-hidden="true"><use href="#i-calendar"/></svg></span>
+              </label>
+            </div>
+            <div class="sheet-foot">
+              <button class="btn btn-primary btn-block" type="button">Record payment</button>
+            </div>
+          </section>
+          <div class="homebar"></div>
+        </div>
+      </div></div>
+      <figcaption>6. Settle up<span>Opened from "Chloe pays you". Prefilled from the plan; partial amounts are allowed. Toast on save: "Payment recorded".</span></figcaption>
+    </figure>
+
+    <!-- 7. Friend detail -->
+    <figure class="shot">
+      <div class="frame-wrap" data-w="390" data-h="844"><div class="device">
+        <div class="phone">
+          <div class="status" aria-hidden="true"><span>9:41</span><span class="sb"><svg width="18" height="12"><use href="#sb-signal"/></svg><svg width="27" height="13"><use href="#sb-batt"/></svg></span></div>
+          <div class="screen">
+            <div class="topbar"><a class="back" href="#"><svg class="ic" aria-hidden="true"><use href="#i-chev-left"/></svg>Friends</a></div>
+            <div style="display:flex;gap:14px;align-items:center;margin-top:4px">
+              <span class="av lg">M</span>
+              <div><h1 class="h-page">Maya Chen</h1><p class="sub">maya@example.com</p></div>
+            </div>
+            <section class="panel" style="margin-top:18px" aria-label="Your balance with Maya">
+              <div class="lbl">You owe Maya</div>
+              <div class="hero num owe">$82.20</div>
+              <div class="note num">Includes $30.00 in Flat 3B</div>
+              <button class="btn btn-primary btn-block" type="button" style="margin-top:16px">Settle up</button>
+            </section>
+            <div class="sh"><h2>Shared expenses</h2></div>
+            <ul class="ledger">
+              <li class="month">November 2026</li>
+              <li><a class="row" href="#"><span class="date"><span class="m">Nov</span><span class="d">10</span></span><span><span class="t" style="display:block">You paid Maya</span><span class="meta" style="display:block">Payment</span></span><span class="stake"><span class="l muted">payment</span><span class="a">$20.00</span></span></a></li>
+              <li><a class="row" href="#"><span class="date"><span class="m">Nov</span><span class="d">9</span></span><span><span class="t" style="display:block">Concert tickets</span><span class="meta" style="display:block">Maya paid $130.00</span></span><span class="stake owe"><span class="l">you borrowed</span><span class="a">$65.00</span></span></a></li>
+              <li><a class="row" href="#"><span class="date"><span class="m">Nov</span><span class="d">6</span></span><span><span class="t" style="display:block">Internet, November</span><span class="meta" style="display:block">Maya paid $60.00 in Flat 3B</span></span><span class="stake owe"><span class="l">you borrowed</span><span class="a">$30.00</span></span></a></li>
+              <li class="month">October 2026</li>
+              <li><a class="row" href="#"><span class="date"><span class="m">Oct</span><span class="d">18</span></span><span><span class="t" style="display:block">Groceries</span><span class="meta" style="display:block">You paid $42.60</span></span><span class="stake owed"><span class="l">you lent</span><span class="a">$21.30</span></span></a></li>
+              <li><a class="row" href="#"><span class="date"><span class="m">Oct</span><span class="d">12</span></span><span><span class="t" style="display:block">Brunch at Lucky's</span><span class="meta" style="display:block">Maya paid $57.00</span></span><span class="stake owe"><span class="l">you borrowed</span><span class="a">$28.50</span></span></a></li>
+            </ul>
+          </div>
+          <a class="btn btn-add fab" href="#"><svg class="ic" aria-hidden="true"><use href="#i-plus"/></svg>Add expense</a>
+          <nav class="tabbar" aria-label="Main">
+            <a class="tab" href="#"><svg class="ic" aria-hidden="true"><use href="#i-home"/></svg>Home</a>
+            <a class="tab" href="#"><svg class="ic" aria-hidden="true"><use href="#i-users"/></svg>Groups</a>
+            <a class="tab" href="#" aria-current="page"><svg class="ic" aria-hidden="true"><use href="#i-user"/></svg>Friends</a>
+            <a class="tab" href="#"><svg class="ic" aria-hidden="true"><use href="#i-activity"/></svg>Activity</a>
+            <a class="tab" href="#"><svg class="ic" aria-hidden="true"><use href="#i-account"/></svg>Account</a>
+          </nav>
+          <div class="homebar"></div>
+        </div>
+      </div></div>
+      <figcaption>7. Friend detail<span>Net across groups and direct expenses: $65.00 + $30.00 + $28.50 − $21.30 − $20.00 = $82.20.</span></figcaption>
+    </figure>
+
+    <!-- 8. Activity -->
+    <figure class="shot">
+      <div class="frame-wrap" data-w="390" data-h="844"><div class="device">
+        <div class="phone">
+          <div class="status" aria-hidden="true"><span>9:41</span><span class="sb"><svg width="18" height="12"><use href="#sb-signal"/></svg><svg width="27" height="13"><use href="#sb-batt"/></svg></span></div>
+          <div class="screen">
+            <header class="apphead"><h1>Activity</h1></header>
+            <ul class="ledger">
+              <li class="month" style="padding-top:8px">November 2026</li>
+              <li><a class="row" href="#"><span class="date"><span class="m">Nov</span><span class="d">10</span></span><span><span class="t" style="display:block">You paid Maya</span><span class="meta" style="display:block">Payment, direct</span></span><span class="stake"><span class="l muted">payment</span><span class="a">$20.00</span></span></a></li>
+              <li><a class="row" href="#"><span class="date"><span class="m">Nov</span><span class="d">9</span></span><span><span class="t" style="display:block">Concert tickets</span><span class="meta" style="display:block">Maya paid $130.00, direct</span></span><span class="stake owe"><span class="l">you borrowed</span><span class="a">$65.00</span></span></a></li>
+              <li><a class="row" href="#"><span class="date"><span class="m">Nov</span><span class="d">6</span></span><span><span class="t" style="display:block">Internet, November</span><span class="meta" style="display:block">Maya paid $60.00 in Flat 3B</span></span><span class="stake owe"><span class="l">you borrowed</span><span class="a">$30.00</span></span></a></li>
+              <li><a class="row" href="#"><span class="date"><span class="m">Nov</span><span class="d">4</span></span><span><span class="t" style="display:block">Dev paid you</span><span class="meta" style="display:block">Payment in Lisbon trip</span></span><span class="stake"><span class="l muted">payment</span><span class="a">$100.00</span></span></a></li>
+              <li><a class="row" href="#"><span class="date"><span class="m">Nov</span><span class="d">2</span></span><span><span class="t" style="display:block">Airport taxi</span><span class="meta" style="display:block">Chloe paid $38.00 in Lisbon trip</span></span><span class="stake owe"><span class="l">you borrowed</span><span class="a">$9.50</span></span></a></li>
+              <li><a class="row" href="#"><span class="date"><span class="m">Nov</span><span class="d">1</span></span><span><span class="t" style="display:block">Fado night tickets</span><span class="meta" style="display:block">Ben paid $180.00 in Lisbon trip</span></span><span class="stake owe"><span class="l">you borrowed</span><span class="a">$45.00</span></span></a></li>
+              <li class="month">October 2026</li>
+              <li><a class="row" href="#"><span class="date"><span class="m">Oct</span><span class="d">31</span></span><span><span class="t" style="display:block">Pastéis de Belém</span><span class="meta" style="display:block">Dev paid $18.60 in Lisbon trip</span></span><span class="stake owe"><span class="l">you borrowed</span><span class="a">$6.20</span></span></a></li>
+              <li><a class="row" href="#"><span class="date"><span class="m">Oct</span><span class="d">30</span></span><span><span class="t" style="display:block">Sintra car hire</span><span class="meta" style="display:block">Ben paid $120.00 in Lisbon trip</span></span><span class="stake only">not involved</span></a></li>
+            </ul>
+          </div>
+          <a class="btn btn-add fab" href="#"><svg class="ic" aria-hidden="true"><use href="#i-plus"/></svg>Add expense</a>
+          <nav class="tabbar" aria-label="Main">
+            <a class="tab" href="#"><svg class="ic" aria-hidden="true"><use href="#i-home"/></svg>Home</a>
+            <a class="tab" href="#"><svg class="ic" aria-hidden="true"><use href="#i-users"/></svg>Groups</a>
+            <a class="tab" href="#"><svg class="ic" aria-hidden="true"><use href="#i-user"/></svg>Friends</a>
+            <a class="tab" href="#" aria-current="page"><svg class="ic" aria-hidden="true"><use href="#i-activity"/></svg>Activity</a>
+            <a class="tab" href="#"><svg class="ic" aria-hidden="true"><use href="#i-account"/></svg>Account</a>
+          </nav>
+          <div class="homebar"></div>
+        </div>
+      </div></div>
+      <figcaption>8. Activity<span>Every expense and payment you can see, newest first. Same row as the ledger, with the group named in the meta.</span></figcaption>
+    </figure>
+
+    <!-- 9. Account -->
+    <figure class="shot">
+      <div class="frame-wrap" data-w="390" data-h="844"><div class="device">
+        <div class="phone">
+          <div class="status" aria-hidden="true"><span>9:41</span><span class="sb"><svg width="18" height="12"><use href="#sb-signal"/></svg><svg width="27" height="13"><use href="#sb-batt"/></svg></span></div>
+          <div class="screen">
+            <header class="apphead"><h1>Account</h1></header>
+            <div style="display:flex;gap:14px;align-items:center;margin-top:4px">
+              <span class="av lg me">A</span>
+              <div><div style="font-weight:600;font-size:1.25rem;line-height:1.2">Ana Sousa</div><p class="sub">ana@example.com</p></div>
+            </div>
+            <form onsubmit="return false" style="margin-top:4px">
+              <label class="field"><span class="lab">Name</span><input class="input" type="text" value="Ana Sousa" autocomplete="name"></label>
+              <label class="field" style="margin-top:12px"><span class="lab">Default currency</span>
+                <span class="inwrap"><select class="input"><option>USD, US dollar</option><option>EUR, Euro</option><option>GBP, British pound</option></select><svg class="ic ic-sm" aria-hidden="true"><use href="#i-chev-down"/></svg></span>
+                <span class="help">New expenses start in this currency.</span>
+              </label>
+              <button class="btn btn-primary" type="submit" style="margin-top:16px">Save changes</button>
+            </form>
+            <div class="field" style="margin-top:24px">
+              <span class="lab" id="themelab">Theme</span>
+              <div class="seg three" role="radiogroup" aria-labelledby="themelab">
+                <button type="button" role="radio" aria-checked="true">System</button>
+                <button type="button" role="radio" aria-checked="false">Light</button>
+                <button type="button" role="radio" aria-checked="false">Dark</button>
+              </div>
+            </div>
+            <ul class="setrows" style="margin-top:20px;border-top:1px solid var(--rule)">
+              <li><a class="row" href="#" style="grid-template-columns:minmax(0,1fr) auto;min-height:56px"><span class="t">Change password</span><svg class="ic ic-sm muted" aria-hidden="true" style="transform:rotate(180deg)"><use href="#i-chev-left"/></svg></a></li>
+              <li><button class="row" type="button" style="grid-template-columns:22px minmax(0,1fr);min-height:56px;width:100%;border:0;border-bottom:1px solid var(--rule);background:none;text-align:left;cursor:pointer"><svg class="ic" aria-hidden="true"><use href="#i-logout"/></svg><span class="t">Sign out</span></button></li>
+            </ul>
+          </div>
+          <nav class="tabbar" aria-label="Main">
+            <a class="tab" href="#"><svg class="ic" aria-hidden="true"><use href="#i-home"/></svg>Home</a>
+            <a class="tab" href="#"><svg class="ic" aria-hidden="true"><use href="#i-users"/></svg>Groups</a>
+            <a class="tab" href="#"><svg class="ic" aria-hidden="true"><use href="#i-user"/></svg>Friends</a>
+            <a class="tab" href="#"><svg class="ic" aria-hidden="true"><use href="#i-activity"/></svg>Activity</a>
+            <a class="tab" href="#" aria-current="page"><svg class="ic" aria-hidden="true"><use href="#i-account"/></svg>Account</a>
+          </nav>
+          <div class="homebar"></div>
+        </div>
+      </div></div>
+      <figcaption>9. Account<span>Name and default currency, theme, password, sign out. No add pill here: nothing to split.</span></figcaption>
+    </figure>
+  </div>
+
+  <h2 class="group-title">Desktop <span>1280 wide, group detail</span></h2>
+  <div class="grid">
+    <figure class="shot wide">
+      <div class="frame-wrap" data-w="1280" data-h="880" style="max-width:1280px"><div class="device">
+        <div class="desk">
+          <aside class="rail">
+            <div class="wordmark">BillSplit</div>
+            <nav aria-label="Main">
+              <a class="ri" href="#"><svg class="ic" aria-hidden="true"><use href="#i-home"/></svg>Home</a>
+              <a class="ri" href="#" aria-current="page"><svg class="ic" aria-hidden="true"><use href="#i-users"/></svg>Groups</a>
+              <a class="ri" href="#"><svg class="ic" aria-hidden="true"><use href="#i-user"/></svg>Friends</a>
+              <a class="ri" href="#"><svg class="ic" aria-hidden="true"><use href="#i-activity"/></svg>Activity</a>
+              <a class="ri" href="#"><svg class="ic" aria-hidden="true"><use href="#i-account"/></svg>Account</a>
+            </nav>
+            <div class="me-card"><span class="av me">A</span><div><div class="n">Ana Sousa</div><div class="e">ana@example.com</div></div></div>
+          </aside>
+          <section class="dmain">
+            <div class="dmain-inner">
+              <a class="back" href="#"><svg class="ic" aria-hidden="true"><use href="#i-chev-left"/></svg>Groups</a>
+              <div class="dhead">
+                <div>
+                  <h1 class="h-page">Lisbon trip</h1>
+                  <p class="sub" style="margin-top:4px">Ana, Ben, Chloe and Dev</p>
+                </div>
+                <div class="actions">
+                  <button class="btn btn-secondary" type="button"><svg class="ic ic-sm" aria-hidden="true"><use href="#i-user-plus"/></svg>Add member</button>
+                  <button class="btn btn-add" type="button"><svg class="ic ic-sm" aria-hidden="true"><use href="#i-plus"/></svg>Add expense</button>
+                </div>
+              </div>
+              <div class="sh" style="margin-top:20px"><h2>Expenses</h2><span class="sub num">$1,117.40 spent in total</span></div>
+              <ul class="ledger">
+                <li class="month">November 2026</li>
+                <li><a class="row" href="#"><span class="date"><span class="m">Nov</span><span class="d">4</span></span><span><span class="t" style="display:block">Dev paid you</span><span class="meta" style="display:block">Payment</span></span><span class="stake"><span class="l muted">payment</span><span class="a">$100.00</span></span></a></li>
+                <li><a class="row" href="#"><span class="date"><span class="m">Nov</span><span class="d">2</span></span><span><span class="t" style="display:block">Airport taxi</span><span class="meta" style="display:block">Chloe paid $38.00</span></span><span class="stake owe"><span class="l">you borrowed</span><span class="a">$9.50</span></span></a></li>
+                <li><a class="row" href="#"><span class="date"><span class="m">Nov</span><span class="d">1</span></span><span><span class="t" style="display:block">Fado night tickets</span><span class="meta" style="display:block">Ben paid $180.00</span></span><span class="stake owe"><span class="l">you borrowed</span><span class="a">$45.00</span></span></a></li>
+                <li class="month">October 2026</li>
+                <li><a class="row" href="#"><span class="date"><span class="m">Oct</span><span class="d">31</span></span><span><span class="t" style="display:block">Pastéis de Belém</span><span class="meta" style="display:block">Dev paid $18.60, split with you and Chloe</span></span><span class="stake owe"><span class="l">you borrowed</span><span class="a">$6.20</span></span></a></li>
+                <li><a class="row" href="#"><span class="date"><span class="m">Oct</span><span class="d">30</span></span><span><span class="t" style="display:block">Sintra car hire</span><span class="meta" style="display:block">Ben paid $120.00, split with Chloe and Dev</span></span><span class="stake only">not involved</span></a></li>
+                <li><a class="row" href="#"><span class="date"><span class="m">Oct</span><span class="d">29</span></span><span><span class="t" style="display:block">Tram 28 day passes</span><span class="meta" style="display:block">Chloe paid $24.80</span></span><span class="stake owe"><span class="l">you borrowed</span><span class="a">$6.20</span></span></a></li>
+                <li><a class="row" href="#"><span class="date"><span class="m">Oct</span><span class="d">28</span></span><span><span class="t" style="display:block">Dinner at Taberna da Rua</span><span class="meta" style="display:block">Ben paid $96.00</span></span><span class="stake owe"><span class="l">you borrowed</span><span class="a">$24.00</span></span></a></li>
+                <li><a class="row" href="#"><span class="date"><span class="m">Oct</span><span class="d">28</span></span><span><span class="t" style="display:block">Airbnb in Alfama</span><span class="meta" style="display:block">You paid $640.00</span></span><span class="stake owed"><span class="l">you lent</span><span class="a">$480.00</span></span></a></li>
+              </ul>
+            </div>
+          </section>
+          <aside class="dside" aria-label="Balances">
+            <h2 style="font-size:1.25rem;font-weight:600">Balances</h2>
+            <ul class="beam" style="margin-top:6px">
+              <li><div class="top"><span class="who">You</span><span class="what owed">get back <b class="num">$289.10</b></span></div><div class="track" aria-hidden="true"><span class="bar pos" style="--w:100%"></span></div></li>
+              <li><div class="top"><span class="who">Ben</span><span class="what owed">gets back <b class="num">$111.30</b></span></div><div class="track" aria-hidden="true"><span class="bar pos" style="--w:38.5%"></span></div></li>
+              <li><div class="top"><span class="who">Dev</span><span class="what owe">owes <b class="num">$172.30</b></span></div><div class="track" aria-hidden="true"><span class="bar neg" style="--w:59.6%"></span></div></li>
+              <li><div class="top"><span class="who">Chloe</span><span class="what owe">owes <b class="num">$228.10</b></span></div><div class="track" aria-hidden="true"><span class="bar neg" style="--w:78.9%"></span></div></li>
+            </ul>
+            <h2 style="font-size:1.25rem;font-weight:600;margin-top:32px">Settle up</h2>
+            <p class="plan-note">3 payments settle everyone.</p>
+            <ul class="plan" style="margin-top:4px">
+              <li><span><span class="t" style="display:block">Chloe pays you</span><span class="a owed" style="display:block">$228.10</span></span><button class="btn btn-secondary" type="button">Record payment</button></li>
+              <li><span><span class="t" style="display:block">Dev pays Ben</span><span class="a" style="display:block">$111.30</span></span><button class="btn btn-secondary" type="button">Record payment</button></li>
+              <li><span><span class="t" style="display:block">Dev pays you</span><span class="a owed" style="display:block">$61.00</span></span><button class="btn btn-secondary" type="button">Record payment</button></li>
+            </ul>
+          </aside>
+        </div>
+      </div></div>
+      <figcaption>10. Group detail, desktop<span>Rail, 720px content column, 320px balances column. Add expense moves into the page header; forms open as centred dialogs.</span></figcaption>
+    </figure>
+  </div>
+
+  <section class="specs" aria-labelledby="specs-h">
+    <h2 id="specs-h">Component specs</h2>
+    <dl>
+      <dt>Ledger row</dt><dd>Grid 40px / 1fr / auto, 12px gap, min-height 64px (60px desktop), 10px vertical padding, 1px bottom rule. Date block: month 13px muted over day 20px/600. Title 16px/500, meta 13px muted, both truncate. Stake column right-aligned, min 84px: label 13px over figure 16px/700 tabular.</dd>
+      <dt>Month header</dt><dd>15px/600 muted, 22px top and 6px bottom padding, rule underneath.</dd>
+      <dt>Balance beam</dt><dd>Row: name 15px/600 left, phrase and figure right. Track 8px tall with a 2px rule baseline and a 16px centre tick. Longest bar = half the track width. Bars grow from centre, 300ms ease-out, once.</dd>
+      <dt>Bottom tab bar</dt><dd>84px total: 60px tap row plus 24px safe area. Five equal columns (78px at 390). Icon 22px, label 13px. Current tab: ink, 700 weight, 3px ink bar on top. Others: ink-muted, 500.</dd>
+      <dt>Add pill</dt><dd>52px tall, radius 26px, padding 0 22px 0 16px, 22px plus icon, 16px/600 label. 16px from the right edge, 16px above the tab bar (bottom 100px). Highlight background, fixed #13213F text, shared shadow.</dd>
+      <dt>Sheet</dt><dd>Surface, top radius 20px, shared shadow, scrim over the page. 36×4 grabber 8px from the top. Header 56px: 20px/700 title, 13px context line, 44px close button. Body padding 0 16px. Sticky footer: rule on top, 12px padding plus 36px safe area, full-width 48px primary.</dd>
+      <dt>Controls</dt><dd>Inputs 48px, radius 10px, 1px --field border. Amount input 64px with a 32px/700 figure. Buttons 44px (48px full-width). Segmented control: 44px segments in a 3px padded track; selected is surface with a 1px ink border and 700 weight.</dd>
+      <dt>Focus</dt><dd>2px --focus outline, 2px offset (1px on inputs, where the border also turns --focus).</dd>
+    </dl>
+  </section>
+</main>
+
+<script>
+(function () {
+  function fit() {
+    document.querySelectorAll('.frame-wrap').forEach(function (w) {
+      var W = +w.dataset.w, H = +w.dataset.h;
+      if (!w.style.maxWidth) w.style.maxWidth = W + 'px';
+      var s = Math.min(1, w.clientWidth / W);
+      w.style.setProperty('--s', s);
+      w.style.height = (H * s) + 'px';
+    });
+  }
+  fit();
+  if ('ResizeObserver' in window) new ResizeObserver(fit).observe(document.body);
+  else window.addEventListener('resize', fit);
+
+  var root = document.documentElement, btn = document.getElementById('themeToggle');
+  function isDark() {
+    var t = root.getAttribute('data-theme');
+    return t ? t === 'dark' : window.matchMedia('(prefers-color-scheme: dark)').matches;
+  }
+  function label() {
+    var d = isDark();
+    btn.setAttribute('aria-pressed', String(d));
+    btn.querySelector('span').textContent = d ? 'Light theme' : 'Dark theme';
+    btn.querySelector('use').setAttribute('href', d ? '#i-sun' : '#i-moon');
+  }
+  btn.addEventListener('click', function () {
+    root.setAttribute('data-theme', isDark() ? 'light' : 'dark');
+    label();
+  });
+  label();
+})();
+</script>
+</body>
+</html>

@@ -1,42 +1,156 @@
+@import "tailwindcss";
+
+/* BillSplit tokens — see DESIGN.md ("cheque & ledger"). */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --paper: #f2f5f1;
+  --surface: #ffffff;
+  --ink: #13213f;
+  --ink-muted: #55627a;
+  --rule: #d3dcd4;
+  --owed: #0b7a5c;
+  --owe: #b3243f;
+  --highlight: #f4d94a;
+  --highlight-ink: #13213f;
+  --field: #7f8c9f;
+  --focus: #2f6feb;
+  --shadow-lift: 0 8px 24px rgb(19 33 63 / 0.14);
+  color-scheme: light;
 }
 
 @media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+  :root:not([data-theme="light"]) {
+    --paper: #0e1524;
+    --surface: #16203a;
+    --ink: #e6ecf5;
+    --ink-muted: #9aa7bd;
+    --rule: #26314d;
+    --owed: #3cc79b;
+    --owe: #ff7a93;
+    --focus: #7aa5ff;
+    --field: #66779a;
+    --shadow-lift: 0 8px 24px rgb(0 0 0 / 0.45);
+    color-scheme: dark;
   }
 }
 
-html,
-body {
-  max-width: 100vw;
-  overflow-x: hidden;
+:root[data-theme="dark"] {
+  --paper: #0e1524;
+  --surface: #16203a;
+  --ink: #e6ecf5;
+  --ink-muted: #9aa7bd;
+  --rule: #26314d;
+  --owed: #3cc79b;
+  --owe: #ff7a93;
+  --focus: #7aa5ff;
+  --shadow-lift: 0 8px 24px rgb(0 0 0 / 0.45);
+  color-scheme: dark;
 }
 
-body {
-  color: var(--foreground);
-  background: var(--background);
-  font-family: Arial, Helvetica, sans-serif;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
+@theme inline {
+  --color-paper: var(--paper);
+  --color-surface: var(--surface);
+  --color-ink: var(--ink);
+  --color-ink-muted: var(--ink-muted);
+  --color-rule: var(--rule);
+  --color-owed: var(--owed);
+  --color-owe: var(--owe);
+  --color-highlight: var(--highlight);
+  --color-highlight-ink: var(--highlight-ink);
+  --color-focus: var(--focus);
+  --color-field: var(--field);
+  --font-sans: var(--font-hanken), ui-sans-serif, system-ui, sans-serif;
+  --shadow-lift: var(--shadow-lift);
+  --radius-control: 10px;
+  --radius-sheet: 20px;
+  /* type scale (DESIGN.md) */
+  --text-meta: 0.8125rem;
+  --text-body-sm: 0.9375rem;
+  --text-title: 1.25rem;
+  --text-heading: 1.625rem;
+  --text-hero: 2.5rem;
 }
 
-* {
-  box-sizing: border-box;
-  padding: 0;
-  margin: 0;
-}
-
-a {
-  color: inherit;
-  text-decoration: none;
-}
-
-@media (prefers-color-scheme: dark) {
+@layer base {
   html {
-    color-scheme: dark;
+    -webkit-text-size-adjust: 100%;
+  }
+  body {
+    background: var(--paper);
+    color: var(--ink);
+    font-family: var(--font-sans);
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+  h1,
+  h2,
+  h3 {
+    line-height: 1.15;
+    letter-spacing: -0.01em;
+  }
+  :focus-visible {
+    outline: 2px solid var(--focus);
+    outline-offset: 2px;
+  }
+  ::selection {
+    background: color-mix(in srgb, var(--highlight) 60%, transparent);
+    color: var(--ink);
+  }
+}
+
+@layer utilities {
+  /* All money figures use tabular numerals. */
+  .num {
+    font-variant-numeric: tabular-nums;
+  }
+  .hero-figure {
+    font-variant-numeric: tabular-nums;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+  }
+}
+
+@keyframes beam-grow {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+@keyframes sheet-up {
+  from {
+    transform: translateY(16px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+.animate-beam {
+  animation: beam-grow 300ms ease-out both;
+}
+.animate-sheet {
+  animation: sheet-up 200ms ease-out both;
+}
+.animate-fade {
+  animation: fade-in 150ms ease-out both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
   }
 }

@@ -2,12 +2,13 @@
 // Comprehensive database structure for expense splitting app
 
 generator client {
-  provider = "prisma-client-js"
+  provider     = "prisma-client"
+  output       = "../lib/generated/prisma"
+  moduleFormat = "esm"
 }
 
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
 }
 
 // User model
@@ -20,6 +21,7 @@ model User {
   phone         String?
   defaultCurrency String  @default("USD")
   emailVerified Boolean   @default(false)
+  sessionVersion Int      @default(0) // bump to invalidate all sessions (e.g. password change)
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
@@ -27,6 +29,8 @@ model User {
   groupMemberships  GroupMember[]
   createdGroups     Group[]       @relation("GroupCreator")
   createdExpenses   Expense[]     @relation("ExpenseCreator")
+  paidExpenses      Expense[]     @relation("ExpensePayer")
+  recordedSettlements Settlement[] @relation("SettlementRecorder")
   expenseSplits     ExpenseSplit[]
   paymentsFrom      Settlement[]  @relation("PaymentFrom")
   paymentsTo        Settlement[]  @relation("PaymentTo")
@@ -80,14 +84,15 @@ model GroupMember {
 // Expense model
 model Expense {
   id          String   @id @default(cuid())
-  amount      Float
+  amountCents Int
   description String
   category    String   @default("general")
   date        DateTime @default(now())
   currency    String   @default("USD")
-  splitMethod String   @default("equal") // equal, percentage, exact, itemized
+  splitMethod String   @default("equal") // equal, exact, percentage, shares (legacy: itemized)
   notes       String?
-  groupId     String?  // Optional - null for friend expenses
+  groupId     String?  // null for direct expenses between two friends
+  paidById    String
   createdById String
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -95,6 +100,7 @@ model Expense {
   // Relations
   group     Group?         @relation(fields: [groupId], references: [id], onDelete: Cascade)
   createdBy User           @relation("ExpenseCreator", fields: [createdById], references: [id])
+  paidBy    User           @relation("ExpensePayer", fields: [paidById], references: [id])
   splits    ExpenseSplit[]
   receipts  Receipt[]
   items     ExpenseItem[]
@@ -103,6 +109,7 @@ model Expense {
 
   @@index([groupId])
   @@index([createdById])
+  @@index([paidById])
   @@index([date])
 }
 
@@ -111,19 +118,20 @@ model ExpenseSplit {
   id         String   @id @default(cuid())
   expenseId  String
   userId     String
-  amount     Float
-  percentage Float?
-  paidAmount Float    @default(0)
-  settled    Boolean  @default(false)
+  amountCents Int
+  percentage Float?   // input value when splitMethod = percentage
+  shares     Float?   // input value when splitMethod = shares
+  paidAmount Float    @default(0)     // legacy, unused since MVP1
+  settled    Boolean  @default(false) // legacy, unused since MVP1 (balances are derived)
   createdAt  DateTime @default(now())
 
   // Relations
   expense Expense @relation(fields: [expenseId], references: [id], onDelete: Cascade)
   user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  @@unique([expenseId, userId])
   @@index([expenseId])
   @@index([userId])
-  @@index([settled])
 }
 
 // Itemized expense items (for detailed splitting)
@@ -160,11 +168,12 @@ model Receipt {
 // Settlement payments
 model Settlement {
   id          String   @id @default(cuid())
-  amount      Float
+  amountCents Int
   currency    String   @default("USD")
   fromUserId  String
   toUserId    String
-  groupId     String?
+  groupId     String?  // null for direct payments between friends
+  createdById String?
   note        String?
   paymentMethod String? // cash, paypal, venmo, stripe, etc.
   settled     Boolean  @default(true)
@@ -174,12 +183,14 @@ model Settlement {
   // Relations
   fromUser User   @relation("PaymentFrom", fields: [fromUserId], references: [id])
   toUser   User   @relation("PaymentTo", fields: [toUserId], references: [id])
-  group    Group? @relation(fields: [groupId], references: [id], onDelete: SetNull)
+  group    Group? @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  createdBy User? @relation("SettlementRecorder", fields: [createdById], references: [id], onDelete: SetNull)
   activities Activity[]
 
   @@index([fromUserId])
   @@index([toUserId])
   @@index([groupId])
+  @@index([settledAt])
 }
 
 // Category definitions

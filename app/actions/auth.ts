@@ -3,6 +3,7 @@
 import { redirect } from "next/navigation";
 import { endSession, startSession } from "@/lib/auth/session";
 import type { ActionResult } from "@/lib/server/errors";
+import { requestPasswordReset, resetPassword } from "@/lib/server/password-reset";
 import { authenticate, registerUser } from "@/lib/server/users";
 import { guard } from "./run";
 
@@ -32,6 +33,24 @@ export async function loginAction(_prev: AuthFormState, form: FormData): Promise
   });
   if (!result.ok) return result;
   redirect(safeNext(form.get("next")));
+}
+
+/** Always reports success for a valid email (no account enumeration). */
+export async function forgotPasswordAction(_prev: AuthFormState, form: FormData): Promise<AuthFormState> {
+  return guard(async () => {
+    await requestPasswordReset({ email: form.get("email") });
+    return undefined;
+  });
+}
+
+/** Sets the new password, then signs this browser in (all other sessions were revoked). */
+export async function resetPasswordAction(_prev: AuthFormState, form: FormData): Promise<AuthFormState> {
+  const result = await guard(async () => {
+    const user = await resetPassword({ token: form.get("token"), password: form.get("password") });
+    await startSession(user);
+  });
+  if (!result.ok) return result;
+  redirect("/home?reset=1");
 }
 
 export async function logoutAction() {

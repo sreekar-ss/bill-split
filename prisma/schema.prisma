@@ -31,6 +31,7 @@ model User {
   createdExpenses   Expense[]     @relation("ExpenseCreator")
   paidExpenses      Expense[]     @relation("ExpensePayer")
   recordedSettlements Settlement[] @relation("SettlementRecorder")
+  passwordResetTokens PasswordResetToken[]
   expenseSplits     ExpenseSplit[]
   paymentsFrom      Settlement[]  @relation("PaymentFrom")
   paymentsTo        Settlement[]  @relation("PaymentTo")
@@ -276,4 +277,18 @@ model Comment {
 
   @@index([expenseId])
   @@index([userId])
+}
+
+// Password reset: single-use, short-lived. Only a SHA-256 hash of the token is stored.
+model PasswordResetToken {
+  id        String    @id @default(cuid())
+  userId    String
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
 }

@@ -35,7 +35,7 @@ lib/auth/*             session cookie, password hashing, getCurrentUser
 ```
 
 ## MVP1 scope
-1. **Accounts**: register, log in, log out, edit name / default currency, change password.
+1. **Accounts**: register, log in, log out, edit name / default currency, change password, **forgot password** (an emailed single-use link that expires in 30 minutes; it doesn't reveal which emails have accounts, and a reset signs out other sessions).
 2. **Groups**: create, rename, add a member by email (they must have an account), remove a member (only when their balance is zero), leave a group.
 3. **Friends**: add by email (auto-accepted). The friend list shows the net balance with each friend across all groups and direct expenses.
 4. **Expenses** (in a group or directly with a friend): description, amount, **payer (any participant)**, date, category, notes. Split methods: **equal / exact amounts / percentages / shares**, with cent-accurate remainder distribution. Edit and delete.
@@ -43,6 +43,17 @@ lib/auth/*             session cookie, password hashing, getCurrentUser
 6. **Settle up**: record a payment between two people in a group or between friends. The amount is prefilled from the suggestion and partial payments are allowed. A payment can be deleted.
 7. **Activity**: a recent feed of expenses and payments across everything the user can see.
 8. **Quality floor**: mobile bottom nav and desktop rail, light and dark themes, empty states, loading skeletons, toasts, keyboard focus, and WCAG AA contrast.
+
+### Email configuration
+Password-reset emails go through [Resend](https://resend.com). Settings:
+- `RESEND_API_KEY` turns sending on.
+- `EMAIL_FROM` sets the sender, e.g. `BillSplit <noreply@yourdomain>`. Without a verified domain, Resend only delivers to your own account address, sent from `onboarding@resend.dev`.
+- `APP_URL` is the public origin used in emailed links. On Vercel it falls back to the branch or production URL.
+
+Without a key:
+- **Local dev:** emails are printed to the server log.
+- **Tests:** emails go to memory or a file.
+- **Production:** the form explains that email isn't set up.
 
 ### Deferred (post-MVP1)
 Receipts/OCR, itemized splits, multi-currency conversion, recurring expenses, notifications/email, invites for people without accounts, comments, payments integration, PWA/offline.

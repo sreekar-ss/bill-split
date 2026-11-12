@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useActionState, useState } from "react";
 import { loginAction, registerAction, type AuthFormState } from "@/app/actions/auth";
 import { Button } from "@/components/ui/button";
@@ -67,6 +68,14 @@ export function LoginForm({ next }: { next?: string }) {
           />
         )}
       </Field>
+      <div className="-mt-1 flex justify-end">
+        <Link
+          href={email.trim() ? `/forgot-password?email=${encodeURIComponent(email.trim())}` : "/forgot-password"}
+          className="inline-flex h-11 items-center text-body-sm font-semibold underline underline-offset-4"
+        >
+          Forgot password?
+        </Link>
+      </div>
       <Button type="submit" size="lg" className="mt-2 w-full" disabled={pending}>
         {pending ? "Logging in…" : "Log in"}
       </Button>

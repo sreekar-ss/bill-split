@@ -35,6 +35,13 @@ export const passwordChangeSchema = z.object({
   newPassword: z.string().min(8, "Use at least 8 characters.").max(128),
 });
 
+export const forgotPasswordSchema = z.object({ email });
+
+export const resetPasswordSchema = z.object({
+  token: z.string().min(20, "This reset link is incomplete. Open the link from the email again.").max(200),
+  password: z.string().min(8, "Use at least 8 characters.").max(128),
+});
+
 export const groupSchema = z.object({
   name: z.string().trim().min(1, "Give the group a name.").max(60, "Keep the name under 60 characters."),
   currency: z.enum(SUPPORTED_CURRENCIES).optional(),

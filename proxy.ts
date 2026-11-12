@@ -6,7 +6,7 @@ import { SESSION_COOKIE, verifySessionToken } from "@/lib/auth/token";
  * actions still call requireUser(), which also validates the user's sessionVersion.
  */
 const APP_PREFIXES = ["/home", "/groups", "/friends", "/activity", "/account", "/expenses"];
-const AUTH_PAGES = ["/login", "/register"];
+const AUTH_PAGES = ["/login", "/register", "/forgot-password"];
 
 export async function proxy(request: NextRequest) {
   const { pathname, search } = request.nextUrl;

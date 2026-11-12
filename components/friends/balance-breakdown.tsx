@@ -1,10 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import { SettleUpSheet, type SettleUpSheetProps } from "@/components/payments/settle-up-sheet";
+import { SettleUpSheet, type SettleUpPerson, type SettleUpSheetProps } from "@/components/payments/settle-up-sheet";
 import { Button } from "@/components/ui/button";
 import { balancePhrase } from "@/components/ui/money";
 import type { FriendDetail } from "@/lib/server/friends";
+import { displayName } from "@/lib/utils/person";
 
 type Person = { id: string; name: string };
 type Entry = FriendDetail["breakdown"][number];
@@ -24,11 +25,21 @@ function contextKey(entry: Entry) {
  * Explains the total with a friend, one line per context (each group, plus direct expenses), each
  * with its own "Settle up", because payments are recorded inside a context.
  */
-export function BalanceBreakdown({ me, friend, breakdown }: { me: Person; friend: Person; breakdown: Entry[] }) {
+export function BalanceBreakdown({
+  me,
+  friend,
+  breakdown,
+}: {
+  me: Person;
+  /** Include status and payment handles so settle-up can label them and offer "Pay with" links. */
+  friend: SettleUpPerson;
+  breakdown: Entry[];
+}) {
   const [settling, setSettling] = useState<Entry | null>(null);
   const [open, setOpen] = useState(false);
   const entries = breakdown.filter((b) => b.cents !== 0);
   if (entries.length === 0) return null;
+  const friendName = displayName(friend);
 
   const sheetProps = (entry: Entry): Omit<SettleUpSheetProps, "open" | "onOpenChange"> => {
     const friendPays = entry.cents > 0;
@@ -40,15 +51,16 @@ export function BalanceBreakdown({ me, friend, breakdown }: { me: Person; friend
       defaultFromId: friendPays ? friend.id : me.id,
       defaultToId: friendPays ? me.id : friend.id,
       defaultAmountCents: Math.abs(entry.cents),
+      paymentNote: entry.context.kind === "group" ? entry.context.name : "BillSplit",
     };
   };
 
   return (
     <>
-      <ul aria-label={`How your balance with ${friend.name} adds up`} className="mt-4 border-t border-rule">
+      <ul aria-label={`How your balance with ${friendName} adds up`} className="mt-4 border-t border-rule">
         {entries.map((entry) => {
           const key = contextKey(entry);
-          const sentence = capitalize(balancePhrase(entry.cents, entry.context.currency, friend.name));
+          const sentence = capitalize(balancePhrase(entry.cents, entry.context.currency, friendName));
           return (
             <li key={key} className="flex min-h-16 flex-wrap items-center justify-between gap-x-3 gap-y-2 border-b border-rule py-3 last:border-b-0">
               <p className="min-w-0 flex-1 text-body-sm">

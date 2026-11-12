@@ -1,16 +1,28 @@
 "use client";
 
-import { Plus, UserPlus } from "lucide-react";
+import { Link2, Plus, UserPlus } from "lucide-react";
 import { useState } from "react";
 import { useAddExpense } from "@/components/shell/add-expense-context";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/page";
 import { AddMemberSheet } from "./add-member-form";
+import { InviteLinkSheet } from "./invite-link-sheet";
 
 /** The group ledger before anything is recorded. A group of one needs a member before an expense makes sense. */
-export function EmptyLedger({ groupId, groupName, alone }: { groupId: string; groupName: string; alone: boolean }) {
+export function EmptyLedger({
+  groupId,
+  groupName,
+  alone,
+  isAdmin = false,
+}: {
+  groupId: string;
+  groupName: string;
+  alone: boolean;
+  isAdmin?: boolean;
+}) {
   const { openAddExpense } = useAddExpense();
   const [adding, setAdding] = useState(false);
+  const [inviting, setInviting] = useState(false);
 
   if (alone) {
     return (
@@ -19,13 +31,20 @@ export function EmptyLedger({ groupId, groupName, alone }: { groupId: string; gr
           title="No expenses yet"
           body="It's just you here so far. Add a member, then log the first expense and we'll keep the tally."
           action={
-            <Button onClick={() => setAdding(true)}>
-              <UserPlus aria-hidden />
-              Add member
-            </Button>
+            <div className="flex flex-wrap gap-3">
+              <Button onClick={() => setAdding(true)}>
+                <UserPlus aria-hidden />
+                Add member
+              </Button>
+              <Button variant="secondary" onClick={() => setInviting(true)}>
+                <Link2 aria-hidden />
+                Invite with a link
+              </Button>
+            </div>
           }
         />
         <AddMemberSheet open={adding} onOpenChange={setAdding} groupId={groupId} groupName={groupName} />
+        <InviteLinkSheet open={inviting} onOpenChange={setInviting} groupId={groupId} groupName={groupName} isAdmin={isAdmin} />
       </>
     );
   }

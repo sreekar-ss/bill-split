@@ -1,4 +1,5 @@
 import "server-only";
+import { displayName } from "@/lib/utils/person";
 import { appUrl } from "./app-url";
 import { db } from "./db";
 import { AppError, forbidden } from "./errors";
@@ -62,12 +63,14 @@ export async function getInvitePreview(token: string | undefined, viewerId?: str
     select: { userId: true, user: { select: { name: true, status: true } } },
     orderBy: { joinedAt: "asc" },
   });
+  const shown = members.filter((m) => m.user.status !== "deleted");
   return {
     groupId: group.id,
     name: group.name,
     currency: group.currency,
-    memberCount: members.length,
-    memberNames: members.filter((m) => m.user.status !== "deleted").slice(0, 5).map((m) => m.user.name),
+    // Counted the same way as the names, so "and 2 others" always adds up.
+    memberCount: shown.length,
+    memberNames: shown.slice(0, 5).map((m) => displayName(m.user)),
     alreadyMember: viewerId ? members.some((m) => m.userId === viewerId) : false,
   };
 }

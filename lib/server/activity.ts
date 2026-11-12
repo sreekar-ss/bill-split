@@ -118,13 +118,13 @@ export async function getDashboard(userId: string) {
     db.user.findUniqueOrThrow({ where: { id: userId }, select: { defaultCurrency: true } }),
   ]);
   const ids = [...relations.keys()];
-  const users = await db.user.findMany({ where: { id: { in: ids } }, select: { id: true, name: true, email: true } });
+  const users = await db.user.findMany({ where: { id: { in: ids } }, select: { id: true, name: true, email: true, status: true } });
   const byId = new Map(users.map((u) => [u.id, u]));
 
   // One entry per person and currency: amounts in different currencies are never added together.
   const people = ids
     .flatMap((id) => {
-      const person = byId.get(id) ?? { id, name: "Unknown", email: "" };
+      const person = byId.get(id) ?? { id, name: "Unknown", email: "", status: "deleted" };
       return relations.get(id)!.totals.map((t) => ({ user: person, currency: t.currency, cents: t.cents }));
     })
     .sort((a, b) => Math.abs(b.cents) - Math.abs(a.cents));

@@ -87,8 +87,8 @@ async function loadAuthorized(userId: string, expenseId: string) {
     where: { id: expenseId },
     include: {
       splits: { select: { userId: true, amountCents: true, percentage: true, shares: true } },
-      paidBy: { select: { id: true, name: true, email: true } },
-      createdBy: { select: { id: true, name: true } },
+      paidBy: { select: { id: true, name: true, email: true, status: true } },
+      createdBy: { select: { id: true, name: true, status: true } },
       group: { select: { id: true, name: true, currency: true, members: { select: { userId: true } } } },
     },
   });
@@ -106,7 +106,7 @@ export async function getExpense(userId: string, expenseId: string) {
   const friendId = e.group ? undefined : e.splits.find((s) => s.userId !== userId)?.userId;
   const people = await db.user.findMany({
     where: { id: { in: [...new Set([...e.splits.map((s) => s.userId), e.paidById])] } },
-    select: { id: true, name: true, email: true },
+    select: { id: true, name: true, email: true, status: true },
   });
   const nameOf = new Map(people.map((p) => [p.id, p]));
   return {
@@ -126,7 +126,7 @@ export async function getExpense(userId: string, expenseId: string) {
     createdAt: e.createdAt,
     updatedAt: e.updatedAt,
     shares: e.splits.map((s) => ({
-      user: nameOf.get(s.userId) ?? { id: s.userId, name: "Former member", email: "" },
+      user: nameOf.get(s.userId) ?? { id: s.userId, name: "Former member", email: "", status: "deleted" },
       amountCents: s.amountCents,
       percentage: s.percentage,
       shares: s.shares,

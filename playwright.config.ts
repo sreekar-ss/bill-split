@@ -39,6 +39,8 @@ export default defineConfig({
       APP_URL: baseURL,
       MAIL_TRANSPORT: "file",
       MAIL_OUTBOX,
+      // No 60s wait between two emails to the same person, so "Resend link" flows can be tested.
+      EMAIL_COOLDOWN_SECONDS: "0",
     },
   },
 });

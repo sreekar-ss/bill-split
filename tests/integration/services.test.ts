@@ -1,5 +1,6 @@
 import { beforeAll, describe, expect, it } from "vitest";
 import { getDashboard, listActivity } from "@/lib/server/activity";
+import { db } from "@/lib/server/db";
 import { createExpense, deleteExpense, getExpense, updateExpense } from "@/lib/server/expenses";
 import { addFriendByEmail, getFriend, listFriends, removeFriend } from "@/lib/server/friends";
 import { addMemberByEmail, createGroup, deleteGroup, getGroup, listGroups, removeMember, updateGroup } from "@/lib/server/groups";
@@ -8,9 +9,12 @@ import { authenticate, changePassword, registerUser, updateProfile } from "@/lib
 
 const today = "2026-11-12";
 let n = 0;
+/** A signed-up user who has confirmed their email (only confirmed accounts can be added by email). */
 async function user(name: string) {
   n += 1;
-  return registerUser({ name, email: `${name.toLowerCase()}.${n}@test.dev`, password: "password123" });
+  const u = await registerUser({ name, email: `${name.toLowerCase()}.${n}@test.dev`, password: "password123" }, { ip: `192.0.2.${n % 250}` });
+  await db.user.update({ where: { id: u.id }, data: { emailVerified: true } });
+  return u;
 }
 
 describe("accounts", () => {
@@ -101,7 +105,7 @@ describe("group ledger", () => {
     let g = await getGroup(ana.id, groupId);
     expect(g.myNetCents).toBe(-3000);
     await recordPayment(cy.id, { groupId, fromUserId: cy.id, toUserId: ben.id, amountCents: 1000, note: "venmo" });
-    await expect(removeMember(ana.id, groupId, cy.id)).resolves.toEqual({ left: false });
+    await expect(removeMember(ana.id, groupId, cy.id)).resolves.toEqual({ left: false, inviteLinkReset: true });
     await expect(recordPayment(ana.id, { groupId, fromUserId: ana.id, toUserId: outsider.id, amountCents: 100 })).rejects.toThrow("members");
     await deletePayment(ben.id, p.id);
     g = await getGroup(ana.id, groupId);

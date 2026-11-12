@@ -1,15 +1,15 @@
 "use client";
 
 import { useState } from "react";
-import { SettleUpSheet } from "@/components/payments/settle-up-sheet";
+import { SettleUpSheet, type SettleUpSheetProps } from "@/components/payments/settle-up-sheet";
 import { Button } from "@/components/ui/button";
 import { formatMoney } from "@/lib/domain/money";
 import { cn } from "@/lib/utils/cn";
-import { paysSentence } from "./format";
+import { paysSentence, type NamedPerson } from "./format";
 
 export interface PlanStep {
-  from: { id: string; name: string };
-  to: { id: string; name: string };
+  from: NamedPerson;
+  to: NamedPerson;
   amountCents: number;
 }
 
@@ -22,13 +22,19 @@ export function SettlePlan({
   people,
   meId,
   currency,
+  paymentNote,
 }: {
   groupId: string;
   plan: PlanStep[];
-  /** Current members: the only people a payment can be recorded between. */
-  people: { id: string; name: string }[];
+  /**
+   * Current members: the only people a payment can be recorded between. Pass the plain name plus
+   * `status`; the sheet labels them (displayName: "Ben (invited)") and reads the payment handles.
+   */
+  people: SettleUpSheetProps["people"];
   meId: string;
   currency: string;
+  /** Prefilled note in the payee's payment app (the group name). */
+  paymentNote?: string;
 }) {
   const [sheet, setSheet] = useState<{ open: boolean; prefill: Prefill }>({ open: false, prefill: {} });
   const memberIds = new Set(people.map((p) => p.id));
@@ -98,6 +104,7 @@ export function SettlePlan({
         defaultFromId={sheet.prefill.fromId}
         defaultToId={sheet.prefill.toId}
         defaultAmountCents={sheet.prefill.amountCents}
+        paymentNote={paymentNote}
       />
     </>
   );

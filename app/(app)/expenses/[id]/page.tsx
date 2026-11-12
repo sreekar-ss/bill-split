@@ -15,6 +15,7 @@ import type { SplitMethod } from "@/lib/domain/splits";
 import { getExpense, type ExpenseDetail } from "@/lib/server/expenses";
 import { orNotFound } from "@/lib/server/page";
 import { cn } from "@/lib/utils/cn";
+import { displayName } from "@/lib/utils/person";
 
 type Props = { params: Promise<{ id: string }> };
 
@@ -46,7 +47,7 @@ function trimNumber(n: number) {
 function contextOf(e: ExpenseDetail) {
   if (e.group) return { href: `/groups/${e.group.id}`, name: e.group.name, label: "Group" };
   const friend = e.shares.find((s) => s.user.id === e.friendId)?.user;
-  if (e.friendId) return { href: `/friends/${e.friendId}`, name: friend?.name ?? "Your friend", label: "With" };
+  if (e.friendId) return { href: `/friends/${e.friendId}`, name: friend ? displayName(friend) : "Your friend", label: "With" };
   return { href: "/activity", name: "Activity", label: "With" };
 }
 
@@ -55,7 +56,7 @@ export default async function ExpensePage({ params }: Props) {
   const { user, expense: e } = await loadExpense(id);
   const ctx = contextOf(e);
 
-  const nameOf = (person: { id: string; name: string }) => (person.id === user.id ? "You" : person.name);
+  const nameOf = (person: { id: string; name: string; status?: string | null }) => (person.id === user.id ? "You" : displayName(person));
   const paidByMe = e.paidBy.id === user.id;
   const myShare = e.shares.find((s) => s.user.id === user.id)?.amountCents ?? 0;
   const stake = paidByMe ? e.amountCents - myShare : -myShare;
@@ -66,12 +67,12 @@ export default async function ExpensePage({ params }: Props) {
     .filter((s) => s.amountCents > 0)
     .sort((a, b) => {
       const rank = (uid: string) => (uid === e.paidBy.id ? 0 : uid === user.id ? 1 : 2);
-      return rank(a.user.id) - rank(b.user.id) || a.user.name.localeCompare(b.user.name);
+      return rank(a.user.id) - rank(b.user.id) || displayName(a.user).localeCompare(displayName(b.user));
     });
   const payerInSplit = rows.some((s) => s.user.id === e.paidBy.id);
 
   const edited = new Date(e.updatedAt).getTime() - new Date(e.createdAt).getTime() > 60_000;
-  const addedBy = e.createdBy.id === user.id ? "you" : e.createdBy.name;
+  const addedBy = e.createdBy.id === user.id ? "you" : displayName(e.createdBy);
 
   return (
     <div className="max-w-[720px]">
@@ -89,7 +90,7 @@ export default async function ExpensePage({ params }: Props) {
       </header>
 
       <Panel>
-        <p className="text-body-sm text-ink-muted">{paidByMe ? "You paid" : `${e.paidBy.name} paid`}</p>
+        <p className="text-body-sm text-ink-muted">{paidByMe ? "You paid" : `${displayName(e.paidBy)} paid`}</p>
         <p className="mt-1 text-hero leading-none">
           <Money cents={e.amountCents} currency={e.currency} className="hero-figure" />
         </p>

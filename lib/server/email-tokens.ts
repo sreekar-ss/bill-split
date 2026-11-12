@@ -7,17 +7,24 @@ import { renderEmail } from "./email-template";
 import { AppError } from "./errors";
 import { isEmailConfigured, sendEmail } from "./mailer";
 import { parse } from "./parse";
+import { clearLoginThrottle } from "./rate-limit";
 import { hashToken, newToken } from "./tokens";
 
 export type EmailTokenPurpose = "verify_email" | "claim_invite";
 
 const TTL_HOURS: Record<EmailTokenPurpose, number> = { verify_email: 48, claim_invite: 24 * 14 };
-/** Minimum gap between two emails of the same purpose to the same account. */
-const COOLDOWN_SECONDS = 60;
+/**
+ * Minimum gap between two emails of the same purpose to the same account. 60s by default;
+ * EMAIL_COOLDOWN_SECONDS overrides it (the E2E server sets 0 so "resend" can be tested quickly).
+ */
+function cooldownSeconds() {
+  const n = Number(process.env.EMAIL_COOLDOWN_SECONDS);
+  return Number.isFinite(n) && n >= 0 && process.env.EMAIL_COOLDOWN_SECONDS !== "" ? n : 60;
+}
 
 async function issue(userId: string, purpose: EmailTokenPurpose): Promise<string | null> {
   const last = await db.emailToken.findFirst({ where: { userId, purpose }, orderBy: { createdAt: "desc" }, select: { createdAt: true } });
-  if (last && Date.now() - last.createdAt.getTime() < COOLDOWN_SECONDS * 1000) return null;
+  if (last && Date.now() - last.createdAt.getTime() < cooldownSeconds() * 1000) return null;
   const token = newToken();
   await db.emailToken.create({
     data: { userId, purpose, tokenHash: hashToken(token), expiresAt: new Date(Date.now() + TTL_HOURS[purpose] * 3600_000) },
@@ -85,7 +92,8 @@ export async function sendClaimInvite(placeholderId: string, context: string): P
   await deliver(
     renderEmail({
       to: user.email,
-      subject: `${context} on BillSplit`,
+      // Fixed subject: the context includes names people choose themselves, which shouldn't headline an email from us.
+      subject: "You're invited to split expenses on BillSplit",
       greeting: `Hi ${user.name},`,
       paragraphs: [
         `${context} on BillSplit, an app for splitting shared costs and keeping track of who owes whom.`,
@@ -114,7 +122,7 @@ export async function claimAccount(input: unknown) {
   const data = parse(claimAccountSchema, input);
   const tokenHash = hashToken(data.token);
   const passwordHash = await hashPassword(data.password);
-  return db.$transaction(async (tx) => {
+  const user = await db.$transaction(async (tx) => {
     const claimed = await tx.emailToken.updateMany({
       where: { tokenHash, purpose: "claim_invite", usedAt: null, expiresAt: { gt: new Date() } },
       data: { usedAt: new Date() },
@@ -131,6 +139,8 @@ export async function claimAccount(input: unknown) {
       select: { id: true, email: true, name: true, sessionVersion: true },
     });
   });
+  await clearLoginThrottle(user.email);
+  return user;
 }
 
 /** From the sign-up page: someone with an invited email asks for a fresh claim link. Never reveals anything. */

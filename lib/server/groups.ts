@@ -5,12 +5,13 @@ import { db } from "./db";
 import { AppError, forbidden, notFound } from "./errors";
 import { sendClaimInvite } from "./email-tokens";
 import { ensureFriendship } from "./friends";
+import { HIDDEN_HANDLES, membersSharingHandles } from "./handle-sharing";
 import { findOrCreateInvitee } from "./invitees";
 import { loadGroupLedger } from "./ledger";
 import { parse } from "./parse";
 
 const userSummary = { id: true, name: true, email: true, status: true } as const;
-/** Shared only with people who share a group or friendship, for settle-up payment links. */
+/** For settle-up payment links; only passed on to viewers the owner has dealt with (see handle-sharing.ts). */
 const paymentHandles = { venmoHandle: true, paypalMe: true, cashTag: true, upiId: true } as const;
 
 export async function assertGroupMember(groupId: string, userId: string) {
@@ -30,7 +31,7 @@ export async function listGroups(userId: string) {
           currency: true,
           updatedAt: true,
           _count: { select: { members: true } },
-          members: { select: { user: { select: { id: true, name: true } } }, orderBy: { joinedAt: "asc" }, take: 5 },
+          members: { select: { user: { select: { id: true, name: true, status: true } } }, orderBy: { joinedAt: "asc" }, take: 5 },
           expenses: { select: { paidById: true, amountCents: true, createdAt: true, splits: { select: { userId: true, amountCents: true } } } },
           settlements: { select: { fromUserId: true, toUserId: true, amountCents: true, createdAt: true } },
         },
@@ -115,6 +116,7 @@ export async function getGroup(userId: string, groupId: string) {
   });
 
   const memberIds = group.members.map((m) => m.user.id);
+  const sharing = await membersSharingHandles(groupId, userId, memberIds);
   const nets = computeNets(
     group.expenses.map((e) => ({ paidById: e.paidById, amountCents: e.amountCents, shares: e.splits })),
     group.settlements.map((s) => ({ fromUserId: s.fromUser.id, toUserId: s.toUser.id, amountCents: s.amountCents })),
@@ -143,7 +145,12 @@ export async function getGroup(userId: string, groupId: string) {
     currencyLocked: group.expenses.length + group.settlements.length > 0,
     /** Everyone's balance is zero (deleting is only allowed then). */
     settled: [...nets.values()].every((cents) => cents === 0),
-    members: group.members.map((m) => ({ ...m.user, role: m.role, netCents: nets.get(m.user.id) ?? 0 })),
+    members: group.members.map((m) => ({
+      ...m.user,
+      ...(sharing.has(m.user.id) ? {} : HIDDEN_HANDLES),
+      role: m.role,
+      netCents: nets.get(m.user.id) ?? 0,
+    })),
     myNetCents: nets.get(userId) ?? 0,
     plan: plan.map((t) => ({ from: person(t.fromUserId), to: person(t.toUserId), amountCents: t.amountCents })),
     expenses: group.expenses.map((e) => ({
@@ -199,7 +206,7 @@ export const CURRENCY_LOCKED = "The currency can't change once the group has exp
 export async function addMemberByEmail(userId: string, groupId: string, input: unknown) {
   await assertGroupMember(groupId, userId);
   const result = await db.$transaction(async (tx) => {
-    const { user: invitee, created } = await findOrCreateInvitee(tx, input);
+    const { user: invitee, created } = await findOrCreateInvitee(tx, input, userId);
     const existing = await tx.groupMember.findUnique({ where: { groupId_userId: { groupId, userId: invitee.id } } });
     if (existing) throw new AppError(`${invitee.name} is already in this group.`, "CONFLICT", { email: "Already in this group." });
     await tx.groupMember.create({ data: { groupId, userId: invitee.id } });
@@ -241,8 +248,12 @@ export async function removeMember(userId: string, groupId: string, memberId: st
       "CONFLICT",
     );
   }
-  await db.groupMember.delete({ where: { groupId_userId: { groupId, userId: memberId } } });
-  return { left: leaving };
+  await db.$transaction(async (tx) => {
+    await tx.groupMember.delete({ where: { groupId_userId: { groupId, userId: memberId } } });
+    // Someone removed by an admin may have kept the invite link: issue a new one so it can't be used to rejoin.
+    if (!leaving) await tx.group.update({ where: { id: groupId }, data: { inviteVersion: { increment: 1 } } });
+  });
+  return { left: leaving, inviteLinkReset: !leaving };
 }
 
 export async function deleteGroup(userId: string, groupId: string) {

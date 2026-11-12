@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./fixtures";
 import {
   addExpense,
   addMember,
@@ -54,7 +54,7 @@ test.describe("groups", () => {
     await expect(page.getByRole("link").filter({ hasText: "Chloe" })).toBeVisible();
   });
 
-  test("adding an unknown email or an existing member shows the error", async ({ page, browser }, info) => {
+  test("an unknown email asks for a name; an existing member shows the error", async ({ page, browser }, info) => {
     const { others } = await setupUsers(page, browser, info, "Ana", "Ben");
     await createGroup(page, "Climbing club");
     await addMember(page, others[0].email);
@@ -63,8 +63,21 @@ test.describe("groups", () => {
     const sheet = dialog(page, "Add member");
     await sheet.getByLabel("Email").fill(`nobody.${Date.now()}@example.test`);
     await sheet.getByRole("button", { name: "Add member" }).click();
-    await expect(sheet.getByRole("alert").filter({ hasText: "That email doesn't have a BillSplit account yet." })).toBeVisible();
+    // Nothing is added yet: the sheet asks who this is before inviting them.
+    await expect(sheet.getByText("Nobody has signed up with that email yet. Add their name and we'll invite them.")).toBeVisible();
+    await expect(sheet.getByLabel("Their name")).toBeFocused();
+    await sheet.getByRole("button", { name: "Invite them" }).click();
+    await expect(sheet.getByText("Add their name so everyone knows who this is.")).toBeVisible();
     await expect(sheet).toBeVisible();
+    await expect(page.getByText("2 members")).toBeVisible();
+
+    // Correcting the email keeps the name field and what's typed in it; only the "nobody" note goes.
+    await sheet.getByLabel("Their name").fill("Nobody");
+    await expect(sheet.getByRole("button", { name: "Invite Nobody" })).toBeVisible();
+    await sheet.getByLabel("Email").fill("");
+    await expect(sheet.getByLabel("Their name")).toHaveValue("Nobody");
+    await expect(sheet.getByText("Nobody has signed up with that email yet.", { exact: false })).toHaveCount(0);
+    await expect(sheet.getByRole("button", { name: "Add member" })).toBeVisible();
 
     await sheet.getByLabel("Email").fill(others[0].email);
     await sheet.getByRole("button", { name: "Add member" }).click();

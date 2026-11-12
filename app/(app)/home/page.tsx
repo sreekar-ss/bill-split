@@ -9,6 +9,7 @@ import { PageHeader, Section } from "@/components/ui/page";
 import { requireUser } from "@/lib/auth/session";
 import { getDashboard } from "@/lib/server/activity";
 import { listFriends } from "@/lib/server/friends";
+import { displayName } from "@/lib/utils/person";
 
 export const metadata: Metadata = { title: "Home" };
 
@@ -54,7 +55,7 @@ export default async function HomePage() {
                 currency={b.currency}
                 rows={b.people.map((p) => ({
                   id: p.user.id,
-                  name: p.user.name,
+                  name: displayName(p.user),
                   cents: p.cents,
                   currency: p.currency,
                   phrase: { positive: "owes you", negative: "you owe" },

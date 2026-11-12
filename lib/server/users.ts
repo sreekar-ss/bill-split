@@ -6,7 +6,7 @@ import { db } from "./db";
 import { AppError } from "./errors";
 import { sendVerificationEmail } from "./email-tokens";
 import { parse } from "./parse";
-import { clear, hit, minutesUntil, peek } from "./rate-limit";
+import { clear, hit, loginKeys, minutesUntil, release } from "./rate-limit";
 
 /** Request context for throttling (the caller's IP, when known). */
 export interface RequestMeta {
@@ -14,8 +14,11 @@ export interface RequestMeta {
 }
 
 const LOGIN_WINDOW_MS = 15 * 60 * 1000;
-const LOGIN_MAX_FAILURES_PER_EMAIL = 8;
+const LOGIN_MAX_FAILURES_PER_EMAIL_AND_IP = 8;
+const LOGIN_MAX_FAILURES_PER_EMAIL = 50;
 const LOGIN_MAX_FAILURES_PER_IP = 30;
+/** Requests with no client IP share one budget instead of skipping the per-IP limits. */
+const UNKNOWN_IP = "unknown";
 const SIGNUPS_PER_IP_PER_HOUR = 10;
 // A real hash (same cost as stored ones) of a random string, so unknown emails take as long as real ones.
 let dummyHash: Promise<string> | undefined;
@@ -23,8 +26,8 @@ const getDummyHash = () => (dummyHash ??= hashPassword(randomBytes(16).toString(
 
 export async function registerUser(input: unknown, meta: RequestMeta = {}) {
   const data = parse(registerSchema, input);
-  if (meta.ip) {
-    const { count, resetAt } = await hit(`signup:ip:${meta.ip}`, 60 * 60 * 1000);
+  {
+    const { count, resetAt } = await hit(`signup:ip:${meta.ip || UNKNOWN_IP}`, 60 * 60 * 1000);
     if (count > SIGNUPS_PER_IP_PER_HOUR) {
       throw new AppError(`Too many new accounts from this network. Try again in ${minutesUntil(resetAt)} minutes.`, "RATE_LIMITED");
     }
@@ -52,12 +55,24 @@ export async function registerUser(input: unknown, meta: RequestMeta = {}) {
 
 export async function authenticate(input: unknown, meta: RequestMeta = {}) {
   const data = parse(loginSchema, input);
-  const emailKey = `login:email:${data.email}`;
-  const ipKey = meta.ip ? `login:ip:${meta.ip}` : null;
+  const keys = loginKeys(data.email, meta.ip || UNKNOWN_IP);
 
-  const [byEmail, byIp] = await Promise.all([peek(emailKey), ipKey ? peek(ipKey) : Promise.resolve({ count: 0, resetAt: null })]);
-  if (byEmail.count >= LOGIN_MAX_FAILURES_PER_EMAIL || byIp.count >= LOGIN_MAX_FAILURES_PER_IP) {
-    const wait = minutesUntil(byEmail.count >= LOGIN_MAX_FAILURES_PER_EMAIL ? byEmail.resetAt : byIp.resetAt);
+  // Reserve the attempt before checking the password, so a burst of parallel guesses can't all
+  // read "under the limit" first. A correct password gives the reservation back.
+  const [byEmailIp, byEmail, byIp] = await Promise.all([
+    hit(keys.emailIp, LOGIN_WINDOW_MS),
+    hit(keys.email, LOGIN_WINDOW_MS),
+    hit(keys.ip, LOGIN_WINDOW_MS),
+  ]);
+  // The lockout is per email *and network*, so someone elsewhere can't lock the owner out just by
+  // knowing their email. The per-email ceiling is much higher and only stops spread-out guessing.
+  const blockedBy =
+    byEmailIp.count > LOGIN_MAX_FAILURES_PER_EMAIL_AND_IP ? byEmailIp
+    : byIp.count > LOGIN_MAX_FAILURES_PER_IP ? byIp
+    : byEmail.count > LOGIN_MAX_FAILURES_PER_EMAIL ? byEmail
+    : null;
+  if (blockedBy) {
+    const wait = minutesUntil(blockedBy.resetAt);
     throw new AppError(`Too many failed attempts. Try again in ${wait} minute${wait === 1 ? "" : "s"}, or reset your password.`, "RATE_LIMITED");
   }
 
@@ -65,10 +80,9 @@ export async function authenticate(input: unknown, meta: RequestMeta = {}) {
   const usable = user?.status === "active" && user.password.length > 0;
   const ok = await verifyPassword(data.password, usable ? user!.password : await getDummyHash());
   if (!usable || !ok) {
-    await Promise.all([hit(emailKey, LOGIN_WINDOW_MS), ipKey ? hit(ipKey, LOGIN_WINDOW_MS) : null]);
     throw new AppError("That email and password don't match an account.", "UNAUTHENTICATED");
   }
-  await clear(emailKey);
+  await Promise.all([clear(keys.emailIp), release(keys.email), release(keys.ip)]);
   return { id: user!.id, email: user!.email, name: user!.name, sessionVersion: user!.sessionVersion };
 }
 

@@ -1,8 +1,9 @@
 import { Fragment } from "react";
 import { DateBlock, LedgerRow, MonthHeading, PaymentLabel, StakeLabel } from "@/components/ui/ledger";
 import { formatMoney, type Cents } from "@/lib/domain/money";
+import { displayName, type PersonStatus } from "@/lib/utils/person";
 
-type Person = { id: string; name: string };
+type Person = { id: string; name: string; status?: PersonStatus | null };
 type GroupRef = { id: string; name: string } | null;
 
 /**
@@ -38,7 +39,7 @@ export type FeedItem =
 
 /** "You" / "you" for the viewer, otherwise the person's name. */
 function who(p: Person, meId: string, start: boolean) {
-  if (p.id !== meId) return p.name;
+  if (p.id !== meId) return displayName(p);
   return start ? "You" : "you";
 }
 
@@ -47,7 +48,7 @@ export function expenseMeta(item: Extract<FeedItem, { type: "expense" }>, meId: 
   if (item.group) return `${paid} in ${item.group.name}`;
   if (!item.friend) return paid;
   // Direct expense: name the other person, or "you" when they paid.
-  return item.paidBy.id === meId ? `${paid} with ${item.friend.name}` : `${paid} with you`;
+  return item.paidBy.id === meId ? `${paid} with ${displayName(item.friend)}` : `${paid} with you`;
 }
 
 export function paymentTitle(item: Extract<FeedItem, { type: "payment" }>, meId: string) {

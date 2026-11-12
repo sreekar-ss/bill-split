@@ -13,6 +13,7 @@ import { requireUser } from "@/lib/auth/session";
 import { getFriend } from "@/lib/server/friends";
 import { orNotFound } from "@/lib/server/page";
 import { cn } from "@/lib/utils/cn";
+import { displayName, isInvited } from "@/lib/utils/person";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -22,7 +23,7 @@ const loadFriend = cache((userId: string, friendId: string) => orNotFound(getFri
 export async function generateMetadata({ params }: Params): Promise<Metadata> {
   const [user, { id }] = await Promise.all([requireUser(), params]);
   const detail = await loadFriend(user.id, id);
-  return { title: detail.friend.name };
+  return { title: displayName(detail.friend) };
 }
 
 export default async function FriendPage({ params }: Params) {
@@ -30,14 +31,16 @@ export default async function FriendPage({ params }: Params) {
   const { friend, balances, breakdown, expenses, payments } = await loadFriend(user.id, id);
   // Balances are per currency (never added together); the default currency comes first.
   const [primary, ...others] = balances;
+  const name = displayName(friend);
+  const invited = isInvited(friend);
 
   const history: FeedItem[] = sortByDate<FeedItem>([
     ...expenses.map((e) => ({ type: "expense" as const, ...e, friend: null })),
     ...payments.map((p) => ({ type: "payment" as const, ...p })),
   ]);
 
-  const headline = !primary ? `You and ${friend.name} are settled up` : primary.cents > 0 ? `${friend.name} owes you` : `You owe ${friend.name}`;
-  const sentence = balances.length ? balances.map((b) => balancePhrase(b.cents, b.currency, friend.name)).join(", and ") : "settled up";
+  const headline = !primary ? `You and ${name} are settled up` : primary.cents > 0 ? `${name} owes you` : `You owe ${name}`;
+  const sentence = balances.length ? balances.map((b) => balancePhrase(b.cents, b.currency, name)).join(", and ") : "settled up";
 
   return (
     <div className="max-w-[720px]">
@@ -52,12 +55,19 @@ export default async function FriendPage({ params }: Params) {
       <header className="flex items-center gap-3.5">
         <Avatar id={friend.id} name={friend.name} size={56} />
         <div className="min-w-0">
-          <h1 className="truncate text-heading font-bold">{friend.name}</h1>
-          <p className="truncate text-body-sm text-ink-muted">{friend.email}</p>
+          <h1 className="truncate text-heading font-bold">{name}</h1>
+          {friend.status === "deleted" ? null : <p className="truncate text-body-sm text-ink-muted">{friend.email}</p>}
         </div>
       </header>
 
-      <Panel className="mt-5" aria-label={`Your balance with ${friend.name}: ${sentence}`} role="region">
+      {invited ? (
+        <p className="mt-4 rounded-[10px] border border-rule px-3.5 py-3 text-body-sm">
+          <span className="font-semibold">Invited.</span>{" "}
+          <span className="text-ink-muted">{friend.name} hasn&apos;t joined yet — expenses you add still count.</span>
+        </p>
+      ) : null}
+
+      <Panel className="mt-5" aria-label={`Your balance with ${name}: ${sentence}`} role="region">
         <p className="text-body-sm font-semibold text-ink-muted">{headline}</p>
         {primary ? (
           <>
@@ -66,31 +76,43 @@ export default async function FriendPage({ params }: Params) {
             </p>
             {others.map((b) => (
               <p key={b.currency} className={cn("mt-1 text-body-sm font-semibold", b.cents > 0 ? "text-owed" : "text-owe")}>
-                Also, {balancePhrase(b.cents, b.currency, friend.name)}
+                Also, {balancePhrase(b.cents, b.currency, name)}
               </p>
             ))}
           </>
         ) : (
           <p className="mt-1 text-body-sm text-ink-muted">Nothing is owed either way across your groups and direct expenses.</p>
         )}
-        <BalanceBreakdown me={{ id: user.id, name: user.name }} friend={{ id: friend.id, name: friend.name }} breakdown={breakdown} />
+        <BalanceBreakdown
+          me={{ id: user.id, name: user.name }}
+          friend={{
+            id: friend.id,
+            name: friend.name,
+            status: friend.status,
+            venmoHandle: friend.venmoHandle,
+            paypalMe: friend.paypalMe,
+            cashTag: friend.cashTag,
+            upiId: friend.upiId,
+          }}
+          breakdown={breakdown}
+        />
       </Panel>
 
       {/* The shell's add button is already preset to this friend, so the section only offers one when empty. */}
       <Section title="Shared history" className="mt-8">
         {history.length === 0 ? (
           <EmptyState
-            title={`Nothing with ${friend.name} yet`}
-            body={`Expenses and payments between you and ${friend.name} will show up here, including ones in shared groups.`}
+            title={`Nothing with ${name} yet`}
+            body={`Expenses and payments between you and ${name} will show up here, including ones in shared groups.`}
             action={<AddExpenseButton preset={{ friendId: friend.id }} />}
           />
         ) : (
-          <MonthlyFeed items={history} meId={user.id} variant="friend" label={`Shared history with ${friend.name}`} />
+          <MonthlyFeed items={history} meId={user.id} variant="friend" label={`Shared history with ${name}`} />
         )}
       </Section>
 
       <div className="mt-8">
-        <RemoveFriendButton friend={{ id: friend.id, name: friend.name }} />
+        <RemoveFriendButton friend={{ id: friend.id, name: friend.name, status: friend.status }} />
       </div>
     </div>
   );

@@ -16,10 +16,14 @@ export async function updateGroupAction(groupId: string, input: { name: string; 
   });
 }
 
-export async function addMemberAction(groupId: string, input: { email: string }) {
+/**
+ * Add someone to a group by email. When nobody has an account with that email the service needs
+ * `name` (VALIDATION with fieldErrors.name), then creates an invited placeholder and emails them.
+ */
+export async function addMemberAction(groupId: string, input: { email: string; name?: string }) {
   return authed(async (user) => {
     const added = await addMemberByEmail(user.id, groupId, input);
-    return { name: added.name };
+    return { id: added.id, name: added.name, invited: added.invited };
   });
 }
 

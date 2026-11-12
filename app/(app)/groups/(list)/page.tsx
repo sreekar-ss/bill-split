@@ -7,6 +7,7 @@ import { LedgerRow } from "@/components/ui/ledger";
 import { EmptyState, PageHeader } from "@/components/ui/page";
 import { requireUser } from "@/lib/auth/session";
 import { listGroups } from "@/lib/server/groups";
+import { displayName } from "@/lib/utils/person";
 
 export const metadata: Metadata = { title: "Groups" };
 
@@ -40,7 +41,7 @@ export default async function GroupsPage() {
               meta={
                 g.memberCount > 1
                   ? // The viewer reads as "You", first, like on the group page.
-                    listNames(["You", ...g.memberPreview.filter((m) => m.id !== user.id).map((m) => m.name)], g.memberCount)
+                    listNames(["You", ...g.memberPreview.filter((m) => m.id !== user.id).map((m) => displayName(m))], g.memberCount)
                   : "Just you"
               }
               trailing={<GroupBalance cents={g.myNetCents} currency={g.currency} />}

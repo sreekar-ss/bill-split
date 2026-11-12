@@ -6,6 +6,7 @@ import { BalanceLabel } from "@/components/ui/money";
 import { EmptyState, PageHeader } from "@/components/ui/page";
 import { requireUser } from "@/lib/auth/session";
 import { listFriends } from "@/lib/server/friends";
+import { displayName, isInvited } from "@/lib/utils/person";
 
 export const metadata: Metadata = { title: "Friends" };
 
@@ -29,28 +30,31 @@ export default async function FriendsPage({ searchParams }: { searchParams: Prom
         />
       ) : (
         <ul aria-label="Friends">
-          {friends.map((f) => (
-            <li key={f.id}>
-              <LedgerRow
-                href={`/friends/${f.id}`}
-                leading={<Avatar id={f.id} name={f.name} size={40} />}
-                title={f.name}
-                meta={f.email}
-                trailing={
-                  f.balances.length === 0 ? (
-                    <BalanceLabel cents={0} currency={user.defaultCurrency} />
-                  ) : (
-                    // One label per currency: different currencies are never added together.
-                    <span className="flex flex-col items-end gap-1.5">
-                      {f.balances.map((b) => (
-                        <BalanceLabel key={b.currency} cents={b.cents} currency={b.currency} />
-                      ))}
-                    </span>
-                  )
-                }
-              />
-            </li>
-          ))}
+          {friends.map((f) => {
+            const person = { name: f.name, status: f.status };
+            return (
+              <li key={f.id}>
+                <LedgerRow
+                  href={`/friends/${f.id}`}
+                  leading={<Avatar id={f.id} name={f.name} size={40} />}
+                  title={displayName(person)}
+                  meta={isInvited(person) ? `Invite sent to ${f.email}` : person.status === "deleted" ? undefined : f.email}
+                  trailing={
+                    f.balances.length === 0 ? (
+                      <BalanceLabel cents={0} currency={user.defaultCurrency} />
+                    ) : (
+                      // One label per currency: different currencies are never added together.
+                      <span className="flex flex-col items-end gap-1.5">
+                        {f.balances.map((b) => (
+                          <BalanceLabel key={b.currency} cents={b.cents} currency={b.currency} />
+                        ))}
+                      </span>
+                    )
+                  }
+                />
+              </li>
+            );
+          })}
         </ul>
       )}
     </div>

@@ -7,6 +7,7 @@ import { db } from "./db";
 import { AppError } from "./errors";
 import { isEmailConfigured, sendEmail } from "./mailer";
 import { parse } from "./parse";
+import { clearLoginThrottle } from "./rate-limit";
 
 export const RESET_TOKEN_TTL_MINUTES = 30;
 /** Don't send another email if one went out this recently (stops inbox flooding). */
@@ -29,8 +30,8 @@ export async function requestPasswordReset(input: unknown): Promise<void> {
     throw new AppError("Password reset emails aren't set up on this server yet. Contact the person who runs it.", "CONFLICT");
   }
 
-  const user = await db.user.findUnique({ where: { email }, select: { id: true, name: true, email: true } });
-  if (!user) return;
+  const user = await db.user.findUnique({ where: { email }, select: { id: true, name: true, email: true, status: true } });
+  if (!user || user.status === "deleted") return;
 
   const now = Date.now();
   const recent = await db.passwordResetToken.findMany({
@@ -74,7 +75,7 @@ export async function resetPassword(input: unknown) {
   const tokenHash = hashToken(token);
   const passwordHash = await hashPassword(password);
 
-  return db.$transaction(async (tx) => {
+  const result = await db.$transaction(async (tx) => {
     // Claim the token atomically so two concurrent submits can't both succeed.
     const claimed = await tx.passwordResetToken.updateMany({
       where: { tokenHash, usedAt: null, expiresAt: { gt: new Date() } },
@@ -84,13 +85,30 @@ export async function resetPassword(input: unknown) {
 
     const { userId } = await tx.passwordResetToken.findUniqueOrThrow({ where: { tokenHash }, select: { userId: true } });
     await tx.passwordResetToken.updateMany({ where: { userId, usedAt: null }, data: { usedAt: new Date() } });
-    // Following the emailed link proves the address belongs to them.
-    return tx.user.update({
+    const before = await tx.user.findUniqueOrThrow({ where: { id: userId }, select: { status: true, emailVerified: true } });
+    if (before.status === "deleted") throw new AppError(EXPIRED_MESSAGE, "VALIDATION", { token: EXPIRED_MESSAGE });
+    if (before.status === "placeholder") {
+      // An invited person who lost their invite email: the reset link proves the mailbox just as well. Same effect as claiming.
+      await tx.emailToken.updateMany({ where: { userId, purpose: "claim_invite", usedAt: null }, data: { usedAt: new Date() } });
+    }
+    // Following the emailed link proves the address belongs to them. If it was never proven before, someone else may
+    // have signed up with it: don't let them keep their payment handles on the account the owner just recovered.
+    const unproven = !before.emailVerified;
+    const user = await tx.user.update({
       where: { id: userId },
-      data: { password: passwordHash, sessionVersion: { increment: 1 }, emailVerified: true },
+      data: {
+        password: passwordHash,
+        sessionVersion: { increment: 1 },
+        emailVerified: true,
+        status: "active",
+        ...(unproven ? { venmoHandle: null, paypalMe: null, cashTag: null, upiId: null } : {}),
+      },
       select: { id: true, email: true, sessionVersion: true },
     });
+    return user;
   });
+  await clearLoginThrottle(result.email);
+  return result;
 }
 
 /** Invalidate outstanding reset links (e.g. after the password is changed from the account page). */

@@ -92,7 +92,24 @@ export async function deleteAccount(userId: string, input: unknown) {
     );
   }
   await db.$transaction(async (tx) => {
+    const memberships = await tx.groupMember.findMany({ where: { userId }, select: { groupId: true } });
     await tx.groupMember.deleteMany({ where: { userId } });
+    // Don't leave groups without anyone who can manage them (reset the link, remove members, delete).
+    for (const { groupId } of memberships) {
+      const remaining = await tx.groupMember.findMany({
+        where: { groupId },
+        select: { id: true, role: true, user: { select: { status: true } } },
+        orderBy: { joinedAt: "asc" },
+      });
+      if (remaining.length === 0) {
+        // Nobody left to see it: stop the invite link working so nobody can join an orphaned group.
+        await tx.group.update({ where: { id: groupId }, data: { inviteEnabled: false } });
+      } else if (!remaining.some((m) => m.role === "admin")) {
+        // Longest-standing member who has an account, or else the longest-standing member.
+        const heir = remaining.find((m) => m.user.status === "active") ?? remaining[0];
+        await tx.groupMember.update({ where: { id: heir.id }, data: { role: "admin" } });
+      }
+    }
     await tx.friendship.deleteMany({ where: { OR: [{ userId }, { friendId: userId }] } });
     await tx.passwordResetToken.deleteMany({ where: { userId } });
     await tx.emailToken.deleteMany({ where: { userId } });

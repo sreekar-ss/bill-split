@@ -13,7 +13,15 @@ import { authenticate, registerUser } from "@/lib/server/users";
 const today = "2026-11-13";
 let n = 0;
 const email = (who: string) => `${who}.v2a.${++n}@test.dev`;
-const register = (name: string) => registerUser({ name, email: email(name.toLowerCase()), password: "password123" });
+const ipFor = () => `198.18.${(n >> 8) & 255}.${n & 255}`;
+/** A new account that hasn't opened its confirmation email yet. */
+const registerUnverified = (name: string) => registerUser({ name, email: email(name.toLowerCase()), password: "password123" }, { ip: ipFor() });
+/** A new account that has confirmed its email (only these can be found by email). */
+async function register(name: string) {
+  const u = await registerUnverified(name);
+  await db.user.update({ where: { id: u.id }, data: { emailVerified: true } });
+  return u;
+}
 
 function linkIn(to: string, path: string) {
   const mail = [...sentEmails].reverse().find((m) => m.to === to && m.text.includes(path));
@@ -27,7 +35,7 @@ beforeEach(() => {
 
 describe("email verification", () => {
   it("sends a link on sign-up that verifies once", async () => {
-    const u = await register("Vera");
+    const u = await registerUnverified("Vera");
     const token = linkIn(u.email, "/verify-email");
     expect(token).toBeTruthy();
     expect((await db.user.findUniqueOrThrow({ where: { id: u.id } })).emailVerified).toBe(false);
@@ -38,7 +46,7 @@ describe("email verification", () => {
   });
 
   it("throttles resends", async () => {
-    const u = await register("Rex");
+    const u = await registerUnverified("Rex");
     expect(await sendVerificationEmail(u.id)).toBe(false); // sign-up email was just sent
     expect(sentEmails.filter((m) => m.to === u.email)).toHaveLength(1);
   });
@@ -54,7 +62,9 @@ describe("invited placeholders", () => {
     const added = await addMemberByEmail(ana.id, g.id, { email: benEmail, name: "Ben" });
     expect(added).toMatchObject({ name: "Ben", invited: true });
     const invite = sentEmails.find((m) => m.to === benEmail);
-    expect(invite?.subject).toBe("Ana added you to Lisbon on BillSplit");
+    // The subject is fixed text; the inviter's and group's (user-chosen) names are only in the body.
+    expect(invite?.subject).toBe("You're invited to split expenses on BillSplit");
+    expect(invite?.text).toContain("Ana added you to Lisbon on BillSplit");
 
     // Placeholders can pay and share right away.
     await createExpense(ana.id, {

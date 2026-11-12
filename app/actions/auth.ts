@@ -5,9 +5,12 @@ import { endSession, startSession } from "@/lib/auth/session";
 import type { ActionResult } from "@/lib/server/errors";
 import { requestPasswordReset, resetPassword } from "@/lib/server/password-reset";
 import { claimAccount, resendClaimForEmail } from "@/lib/server/email-tokens";
+import { hit } from "@/lib/server/rate-limit";
 import { requestMeta } from "@/lib/server/request-meta";
 import { authenticate, registerUser } from "@/lib/server/users";
 import { guard } from "./run";
+
+const INVITE_RESENDS_PER_IP_PER_HOUR = 10;
 
 /** Only allow same-site relative redirects after login. */
 function safeNext(value: FormDataEntryValue | null): string {
@@ -68,7 +71,11 @@ export async function claimAccountAction(_prev: AuthFormState, form: FormData): 
 /** From the sign-up page when the email belongs to a pending invite. Always succeeds (no enumeration). */
 export async function resendInviteAction(email: string) {
   return guard(async () => {
-    if (typeof email === "string" && email.length <= 254) await resendClaimForEmail(email);
+    if (typeof email !== "string" || email.length > 254) return undefined;
+    // No account needed to ask, so cap it per network; over the cap it quietly does nothing (same answer as always).
+    const { ip } = await requestMeta();
+    const { count } = await hit(`invite-resend:ip:${ip || "unknown"}`, 60 * 60 * 1000);
+    if (count <= INVITE_RESENDS_PER_IP_PER_HOUR) await resendClaimForEmail(email);
     return undefined;
   });
 }

@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./fixtures";
 import { addExpense, dialog, expectToast, expenseSheet, fillExpense, setupGroup, shellAddExpense, setupUsers } from "./helpers";
 
 test.describe("resilience and focus", () => {
@@ -61,6 +61,6 @@ test.describe("resilience and focus", () => {
     await page.goto("/logout");
     await expect(page).toHaveURL(/\/home$/);
     await page.goto("/account");
-    await expect(page.getByRole("button", { name: "Log out" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Log out", exact: true })).toBeVisible();
   });
 });

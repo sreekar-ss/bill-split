@@ -10,6 +10,7 @@ import { BalanceBeam, type BeamRow } from "@/components/ui/balance-beam";
 import { PageHeader, Section } from "@/components/ui/page";
 import { requireUser } from "@/lib/auth/session";
 import { formatMoney } from "@/lib/domain/money";
+import { displayName } from "@/lib/utils/person";
 import { getGroup } from "@/lib/server/groups";
 import { orNotFound } from "@/lib/server/page";
 
@@ -36,14 +37,25 @@ export default async function GroupPage({ params }: Props) {
 
   const totalSpent = group.expenses.reduce((sum, e) => sum + e.amountCents, 0);
   const spent = `${formatMoney(totalSpent, group.currency)} spent`;
-  const people = group.members.map((m) => ({ id: m.id, name: m.name }));
-  // Viewer first, so the subtitle reads "You, Ben and Chloe".
-  const names = [...group.members].sort((a, b) => Number(b.id === meId) - Number(a.id === meId)).map((m) => (m.id === meId ? "You" : m.name));
+  // The settle-up sheet labels people itself (displayName: "Ben (invited)"); handles drive its payment links.
+  const people = group.members.map((m) => ({
+    id: m.id,
+    name: m.name,
+    status: m.status,
+    venmoHandle: m.venmoHandle,
+    paypalMe: m.paypalMe,
+    cashTag: m.cashTag,
+    upiId: m.upiId,
+  }));
+  // Viewer first, so the subtitle reads "You, Ben (invited) and Chloe".
+  const names = [...group.members]
+    .sort((a, b) => Number(b.id === meId) - Number(a.id === meId))
+    .map((m) => (m.id === meId ? "You" : displayName(m)));
 
   const beam: BeamRow[] = group.members.map((m) =>
     m.id === meId
       ? { id: m.id, name: "You", cents: m.netCents, phrase: { positive: "get back", negative: "owe" } }
-      : { id: m.id, name: m.name, cents: m.netCents },
+      : { id: m.id, name: displayName(m), cents: m.netCents },
   );
 
   return (
@@ -97,7 +109,7 @@ export default async function GroupPage({ params }: Props) {
         {/* A group of one has nobody to settle with. */}
         {solo ? null : (
           <Section title="Settle up">
-            <SettlePlan groupId={group.id} plan={group.plan} people={people} meId={meId} currency={group.currency} />
+            <SettlePlan groupId={group.id} plan={group.plan} people={people} meId={meId} currency={group.currency} paymentNote={group.name} />
           </Section>
         )}
       </aside>

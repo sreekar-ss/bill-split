@@ -4,6 +4,7 @@ import { db, type Tx } from "./db";
 import { AppError, notFound } from "./errors";
 import { computeRelations, directNets } from "./ledger";
 import { sendClaimInvite } from "./email-tokens";
+import { HIDDEN_HANDLES, sharesHandlesWith } from "./handle-sharing";
 import { findOrCreateInvitee } from "./invitees";
 
 const userSummary = { id: true, name: true, email: true, status: true } as const;
@@ -43,7 +44,7 @@ export async function listFriends(userId: string) {
     }),
     computeRelations(userId),
   ]);
-  const people = new Map<string, { id: string; name: string; email: string }>();
+  const people = new Map<string, { id: string; name: string; email: string; status: string }>();
   for (const f of friendships) {
     const other = f.user.id === userId ? f.friend : f.user;
     people.set(other.id, other);
@@ -54,7 +55,7 @@ export async function listFriends(userId: string) {
 }
 
 export async function addFriendByEmail(userId: string, input: unknown) {
-  const { user: friend } = await findOrCreateInvitee(db, input);
+  const { user: friend } = await findOrCreateInvitee(db, input, userId);
   if (friend.id === userId) throw new AppError("That's your own email.", "VALIDATION", { email: "That's your own email." });
   if (await areFriends(userId, friend.id)) {
     throw new AppError(`You and ${friend.name} are already friends.`, "CONFLICT", { email: "Already a friend." });
@@ -127,7 +128,7 @@ export async function getFriend(userId: string, friendId: string) {
   const relation = relations.get(friendId);
 
   return {
-    friend,
+    friend: (await sharesHandlesWith(friendId, userId)) ? friend : { ...friend, ...HIDDEN_HANDLES },
     /** Per-currency totals with this friend, non-zero only (empty = settled up). */
     balances: relation?.totals ?? [],
     breakdown: relation?.byContext ?? [],

@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./fixtures";
 import { addExpense, addMember, createGroup, dialog, expectToast, setupUsers } from "./helpers";
 
 test.describe("friends", () => {
@@ -9,13 +9,17 @@ test.describe("friends", () => {
     await page.goto("/friends");
     await expect(page.getByRole("heading", { name: "No friends yet" })).toBeVisible();
 
-    // Unknown email first, then the real one.
+    // An email with no account asks for a name; correcting it to a real account goes back to "Add friend" (the name field stays, and is ignored).
     await page.getByRole("button", { name: "Add friend" }).first().click();
     const sheet = dialog(page, "Add friend");
     await sheet.getByLabel("Email").fill(`ghost.${Date.now()}@example.test`);
     await sheet.getByRole("button", { name: "Add friend" }).click();
-    await expect(sheet.getByRole("alert").filter({ hasText: "That email doesn't have a BillSplit account yet." })).toBeVisible();
+    await expect(sheet.getByText("Nobody has signed up with that email yet. Add their name and we'll invite them.")).toBeVisible();
+    await expect(sheet.getByLabel("Their name")).toBeFocused();
+    await expect(sheet.getByRole("button", { name: "Invite them" })).toBeVisible();
+    await sheet.getByLabel("Their name").fill("Typo");
     await sheet.getByLabel("Email").fill(maya.email);
+    await expect(sheet.getByLabel("Their name")).toHaveValue("Typo");
     await sheet.getByRole("button", { name: "Add friend" }).click();
     await expectToast(page, "Friend added");
     await expect(sheet).toBeHidden();

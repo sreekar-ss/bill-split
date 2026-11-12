@@ -13,7 +13,9 @@ import { Field, FormError, Input, Select } from "@/components/ui/field";
 import { Sheet } from "@/components/ui/sheet";
 import { formatMoney, SUPPORTED_CURRENCIES } from "@/lib/domain/money";
 import { cn } from "@/lib/utils/cn";
+import { displayName, isInvited, type PersonStatus } from "@/lib/utils/person";
 import { AddMemberForm } from "./add-member-form";
+import { avatarName } from "./format";
 import { runAction } from "@/lib/client/run-action";
 
 export interface GroupSettingsData {
@@ -25,10 +27,14 @@ export interface GroupSettingsData {
   currencyLocked: boolean;
   /** Everyone is settled up (a group can only be deleted then). */
   settled: boolean;
-  members: { id: string; name: string; email: string; role: string; netCents: number }[];
+  members: { id: string; name: string; email: string; role: string; netCents: number; status?: PersonStatus | null }[];
 }
 
-type Confirm = { kind: "remove"; member: { id: string; name: string } } | { kind: "leave" } | { kind: "delete" } | null;
+type Confirm =
+  | { kind: "remove"; member: { id: string; name: string; invited: boolean } }
+  | { kind: "leave" }
+  | { kind: "delete" }
+  | null;
 
 export function GroupSettingsSheet({
   open,
@@ -149,7 +155,7 @@ function MembersSection({ group, meId, onLeft }: { group: GroupSettingsData; meI
       if (current.kind === "remove") {
         const res = await runAction(() => removeMemberAction(group.id, current.member.id));
         if (!res.ok) return setConfirmError(res.error);
-        toast.success("Member removed");
+        toast.success("Member removed", { description: "The group's invite link has changed, so older links no longer work." });
         setConfirm(null);
       } else if (current.kind === "leave") {
         const res = await runAction(() => removeMemberAction(group.id, meId));
@@ -173,7 +179,9 @@ function MembersSection({ group, meId, onLeft }: { group: GroupSettingsData; meI
     confirm?.kind === "remove"
       ? {
           title: `Remove ${confirm.member.name}?`,
-          body: `They'll lose access to ${group.name}. Expenses they were part of stay in the ledger.`,
+          body: confirm.member.invited
+            ? `They won't be able to join ${group.name} from their invite email. Expenses they were part of stay in the ledger. The group's invite link also changes, so links shared earlier stop working.`
+            : `They'll lose access to ${group.name}. Expenses they were part of stay in the ledger. The group's invite link also changes, so links shared earlier stop working.`,
           label: "Remove member",
         }
       : confirm?.kind === "leave"
@@ -200,15 +208,21 @@ function MembersSection({ group, meId, onLeft }: { group: GroupSettingsData; meI
           {group.members.map((m) => {
             const bal = memberBalance(m.netCents, group.currency);
             const isMe = m.id === meId;
+            const label = displayName(m);
+            const deleted = m.status === "deleted";
             return (
               <li key={m.id} className="flex min-h-16 items-center gap-3 border-b border-rule py-2.5">
-                <Avatar id={m.id} name={m.name} size={40} />
+                <Avatar id={m.id} name={avatarName(m)} size={40} />
                 <span className="min-w-0 flex-1">
                   <span className="block truncate font-medium">
-                    {isMe ? `${m.name} (you)` : m.name}
+                    {isMe ? `${label} (you)` : label}
                     {m.role === "admin" ? <span className="ml-2 text-meta font-normal text-ink-muted">admin</span> : null}
                   </span>
-                  <span className="block truncate text-meta text-ink-muted">{m.email}</span>
+                  {deleted || !m.email ? null : (
+                    <span className="block truncate text-meta text-ink-muted">
+                      {isInvited(m) ? `Invite sent to ${m.email}` : m.email}
+                    </span>
+                  )}
                   <span className={cn("block text-meta", bal.cls)}>{bal.text}</span>
                 </span>
                 {group.isAdmin && !isMe ? (
@@ -216,8 +230,8 @@ function MembersSection({ group, meId, onLeft }: { group: GroupSettingsData; meI
                     variant="destructive"
                     size="sm"
                     className="h-11"
-                    aria-label={`Remove ${m.name}`}
-                    onClick={() => openConfirm({ kind: "remove", member: { id: m.id, name: m.name } })}
+                    aria-label={`Remove ${label}`}
+                    onClick={() => openConfirm({ kind: "remove", member: { id: m.id, name: label, invited: isInvited(m) } })}
                   >
                     Remove
                   </Button>

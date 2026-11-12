@@ -8,7 +8,7 @@ import { authenticate, changePassword, registerUser } from "@/lib/server/users";
 let n = 0;
 async function user() {
   n += 1;
-  return registerUser({ name: "Rae", email: `rae.reset.${n}@test.dev`, password: "old-password-1" });
+  return registerUser({ name: "Rae", email: `rae.reset.${n}@test.dev`, password: "old-password-1" }, { ip: `192.0.2.${100 + (n % 150)}` });
 }
 
 const resetMails = () => sentEmails.filter((m) => m.subject === "Reset your BillSplit password");

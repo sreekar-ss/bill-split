@@ -20,6 +20,7 @@ import { CATEGORY_OPTIONS, currencyName, currencySymbol, isCategory } from "./ca
 import { SplitEditor, SplitStatusLine, type Participant } from "./split-editor";
 import { emptyDraft, evaluateSplit, type SplitDraft, type ValueMethod } from "./split-math";
 import { runAction } from "@/lib/client/run-action";
+import { displayName } from "@/lib/utils/person";
 
 export interface ExpenseSheetProps {
   open: boolean;
@@ -62,15 +63,15 @@ function buildTargets(contexts: ExpenseContexts, editing?: ExpenseDetail): Targe
       id: g.id,
       name: g.name,
       currency: g.currency,
-      participants: meFirst(g.members.map((m) => ({ id: m.id, name: m.name }))),
+      participants: meFirst(g.members.map((m) => ({ id: m.id, name: displayName(m) }))),
     })),
     ...contexts.friends.map((f) => ({
       key: `f:${f.id}`,
       kind: "friend" as const,
       id: f.id,
-      name: f.name,
+      name: displayName(f),
       currency: f.currency,
-      participants: [me, { id: f.id, name: f.name }],
+      participants: [me, { id: f.id, name: displayName(f) }],
     })),
   ];
 

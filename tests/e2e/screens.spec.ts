@@ -1,5 +1,6 @@
-import { mkdirSync } from "node:fs";
-import { expect, test, type Page } from "@playwright/test";
+import { mkdirSync, rmSync } from "node:fs";
+import type { Page } from "@playwright/test";
+import { expect, test } from "./fixtures";
 import {
   addExpense,
   addMember,
@@ -9,6 +10,7 @@ import {
   expenseLink,
   expenseSheet,
   fillExpense,
+  login,
   makeUser,
   nav,
   register,
@@ -17,6 +19,7 @@ import {
   shellAddExpense,
   splitInput,
 } from "./helpers";
+import { linkFor } from "./mail";
 
 /**
  * Seeds a realistic dataset through the UI and saves a screenshot of every screen to
@@ -30,6 +33,8 @@ const SHOT_STYLE = "[data-sonner-toaster]{display:none !important} *{caret-color
 test("capture every screen", async ({ page, browser }, info) => {
   test.setTimeout(240_000);
   const dir = `reports/screens/${info.project.name}`;
+  // Start clean so renumbered screens don't leave stale files behind.
+  rmSync(dir, { recursive: true, force: true });
   mkdirSync(dir, { recursive: true });
   let n = 0;
   const shot = async (name: string, opts: { fullPage?: boolean; target?: Page } = {}) => {
@@ -66,15 +71,46 @@ test("capture every screen", async ({ page, browser }, info) => {
   const chloe = await registerElsewhere(browser, makeUser(info, "Chloe"));
   const dev = await registerElsewhere(browser, makeUser(info, "Dev"));
   const maya = await registerElsewhere(browser, makeUser(info, "Maya"));
+  // Ben has saved payment handles, so paying him offers deep links (PayPal works in EUR).
+  {
+    const ctx = await browser.newContext();
+    const benPage = await ctx.newPage();
+    await benPage.goto("/login");
+    await login(benPage, ben.email, ben.password);
+    await expect(benPage).toHaveURL(/\/home$/);
+    await benPage.goto("/account");
+    await benPage.getByLabel("Venmo username").fill("ben-silva");
+    await benPage.getByLabel("PayPal.me name").fill("bensilva");
+    await benPage.getByRole("button", { name: "Save payment details" }).click();
+    await expectToast(benPage, "Payment details saved");
+    await ctx.close();
+  }
   const me = makeUser(info, "Ana");
   me.name = "Ana Lima";
-  await register(page, me);
+  await register(page, me, { verify: false });
+
+  // Fresh sign-up: the confirm-your-email banner sits above Home. Then confirm, so the rest is clean.
+  await expect(page.getByRole("region", { name: "Confirm your email" })).toBeVisible();
+  await shot("home-verify-banner", { fullPage: false });
+  await page.goto(await linkFor(me.email, "/verify-email"));
+  await expect(page.getByRole("heading", { level: 1, name: "Email confirmed" })).toBeVisible();
 
   const groupUrl = await createGroup(page, "Lisbon trip", "EUR");
   for (const u of [ben, chloe, dev]) await addMember(page, u.email);
 
   await addExpense(page, { amount: "640", description: "Apartment in Alfama", category: "Travel", date: "2026-10-03" });
-  await addExpense(page, { amount: "186.40", description: "Dinner at Taberna", paidBy: "Ben", category: "Food and drink", date: "2026-10-04" });
+  // Ben records the dinner he paid for himself. Having dealt with the group, his payment handles now show to Ana.
+  {
+    const ctx = await browser.newContext();
+    const benPage = await ctx.newPage();
+    await benPage.goto("/login");
+    await login(benPage, ben.email, ben.password);
+    await expect(benPage).toHaveURL(/\/home$/);
+    await benPage.goto(groupUrl);
+    await addExpense(benPage, { amount: "186.40", description: "Dinner at Taberna", category: "Food and drink", date: "2026-10-04" });
+    await ctx.close();
+  }
+  await page.reload();
   await addExpense(page, {
     amount: "240",
     description: "Surf lessons",
@@ -154,6 +190,26 @@ test("capture every screen", async ({ page, browser }, info) => {
   await shot("settle-up", { fullPage: false });
   await page.keyboard.press("Escape");
 
+  // Paying Ben, who has saved handles: "Pay Ben €42.00 with PayPal".
+  await settlePanel(page).getByRole("button", { name: "Record a different payment" }).click();
+  sheet = dialog(page, "Settle up");
+  await sheet.getByLabel("From", { exact: true }).selectOption({ label: "You" });
+  await sheet.getByLabel("To", { exact: true }).selectOption({ label: "Ben" });
+  await sheet.getByLabel("Amount", { exact: true }).fill("42");
+  await expect(sheet.getByRole("link", { name: /with PayPal/ })).toBeVisible();
+  await shot("settle-up-payment-links", { fullPage: false });
+  await page.keyboard.press("Escape");
+  await expect(sheet).toBeHidden();
+
+  // The group's invite link.
+  await page.getByRole("button", { name: "Invite with a link" }).first().click();
+  sheet = dialog(page, "Invite with a link");
+  await expect(sheet.getByLabel("Invite link")).toHaveValue(/\/join\//);
+  const joinPath = new URL(await sheet.getByLabel("Invite link").inputValue()).pathname;
+  await shot("invite-link-sheet", { fullPage: false });
+  await page.keyboard.press("Escape");
+  await expect(sheet).toBeHidden();
+
   await expenseLink(page, "Surf lessons").click();
   await expect(page.getByRole("heading", { level: 1, name: "Surf lessons" })).toBeVisible();
   await shot("expense-detail");
@@ -176,6 +232,33 @@ test("capture every screen", async ({ page, browser }, info) => {
   await page.goto(emptyGroupUrl);
   await expect(page.getByRole("heading", { name: "No expenses yet" })).toBeVisible();
   await shot("empty-group");
+
+  // Adding someone with no account: the sheet asks for their name, then invites them.
+  const priyaEmail = makeUser(info, "Priya").email;
+  await page.getByRole("button", { name: "Add member" }).first().click();
+  sheet = dialog(page, "Add member");
+  await sheet.getByLabel("Email").fill(priyaEmail);
+  await sheet.getByRole("button", { name: "Add member" }).click();
+  await expect(sheet.getByLabel("Their name")).toBeFocused();
+  await sheet.getByLabel("Their name").fill("Priya");
+  await shot("add-member-name", { fullPage: false });
+  await sheet.getByRole("button", { name: "Invite Priya" }).click();
+  await expectToast(page, "Priya invited");
+  await expect(page.getByText("You and Priya (invited)")).toBeVisible();
+  await shot("group-with-invited");
+
+  // --- Signed out: join link and claim page ------------------------------------------------
+  {
+    const ctx = await browser.newContext();
+    const visitor = await ctx.newPage();
+    await visitor.goto(joinPath);
+    await expect(visitor.getByRole("heading", { level: 1, name: "Join Lisbon trip" })).toBeVisible();
+    await shot("join-signed-out", { target: visitor });
+    await visitor.goto(await linkFor(priyaEmail, "/invite/accept"));
+    await expect(visitor.getByRole("heading", { level: 1, name: "Join BillSplit" })).toBeVisible();
+    await shot("claim-account", { target: visitor });
+    await ctx.close();
+  }
 
   // --- Dark mode -------------------------------------------------------------------------
   await page.evaluate(() => localStorage.setItem("bs-theme", "dark"));

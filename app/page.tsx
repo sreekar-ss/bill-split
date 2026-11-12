@@ -1,3 +1,4 @@
+import { CircleCheck } from "lucide-react";
 import Link from "next/link";
 import { BalanceBeam, type BeamRow } from "@/components/ui/balance-beam";
 import { Button } from "@/components/ui/button";
@@ -99,7 +100,26 @@ function ExampleGroup() {
   );
 }
 
-export default function LandingPage() {
+type Props = { searchParams: Promise<{ deleted?: string | string[] }> };
+
+/** Shown once after "Delete account" lands here (/?deleted=1). */
+function DeletedNotice() {
+  return (
+    <div
+      role="status"
+      className="mx-auto mt-4 flex max-w-[1040px] items-start gap-3 rounded-[10px] border border-rule bg-surface px-3.5 py-3"
+    >
+      <CircleCheck className="mt-0.5 size-[18px] shrink-0 text-ink-muted" aria-hidden />
+      <p className="text-body-sm">
+        <span className="font-semibold">Your account was deleted.</span>{" "}
+        <span className="text-ink-muted">Thanks for using BillSplit. Your name now shows as &ldquo;Deleted user&rdquo; in other people&apos;s history.</span>
+      </p>
+    </div>
+  );
+}
+
+export default async function LandingPage({ searchParams }: Props) {
+  const { deleted } = await searchParams;
   return (
     <div className="min-h-dvh px-4 md:px-6">
       <header className="mx-auto flex max-w-[1040px] items-center justify-between gap-3 pt-4 md:pt-6">
@@ -110,6 +130,7 @@ export default function LandingPage() {
       </header>
 
       <main id="main" className="mx-auto max-w-[1040px]">
+        {deleted === "1" ? <DeletedNotice /> : null}
         <section
           aria-labelledby="hero-heading"
           className="grid items-start gap-10 pb-14 pt-10 md:pt-16 lg:grid-cols-[minmax(0,1fr)_minmax(0,460px)] lg:gap-16 lg:pt-24"

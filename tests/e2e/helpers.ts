@@ -1,4 +1,5 @@
 import { expect, type Browser, type Locator, type Page, type TestInfo } from "@playwright/test";
+import { linkFor } from "./mail";
 
 export const PASSWORD = "correct-horse-42";
 
@@ -28,13 +29,24 @@ export function rx(text: string): RegExp {
 
 // --- Auth -----------------------------------------------------------------------------------
 
-export async function register(page: Page, user: TestUser) {
+/**
+ * Signs up through the form, then (unless `verify: false`) opens the emailed confirmation link,
+ * as most people do. Only confirmed accounts can be added to groups or as friends by email.
+ */
+export async function register(page: Page, user: TestUser, { verify = true }: { verify?: boolean } = {}) {
   await page.goto("/register");
   await page.getByLabel("Name", { exact: true }).fill(user.name);
   await page.getByLabel("Email", { exact: true }).fill(user.email);
   await page.getByLabel("Password", { exact: true }).fill(user.password);
   await page.getByRole("button", { name: "Create account" }).click();
   await expect(page).toHaveURL(/\/home$/);
+  if (verify) {
+    const res = await page.request.get(await linkFor(user.email, "/verify-email"));
+    expect(res.ok()).toBe(true);
+    // Re-render the current page without the confirm-your-email banner.
+    await page.reload();
+    await expect(page.getByTestId("verify-banner")).toHaveCount(0);
+  }
 }
 
 export async function login(page: Page, email: string, password: string) {
@@ -45,7 +57,7 @@ export async function login(page: Page, email: string, password: string) {
 
 export async function logout(page: Page) {
   await page.goto("/account");
-  await page.getByRole("button", { name: "Log out" }).click();
+  await page.getByRole("button", { name: "Log out", exact: true }).click();
   await expect(page).toHaveURL(/\/login/);
 }
 
@@ -118,7 +130,7 @@ export function groupBalances(page: Page): Locator {
 export function groupBeamRow(page: Page, name: string): Locator {
   return groupBalances(page)
     .getByRole("listitem")
-    .filter({ has: page.locator("span.font-semibold", { hasText: new RegExp(`^\\s*${name}\\s*$`) }) });
+    .filter({ has: page.locator("span.font-semibold", { hasText: new RegExp(`^\\s*${rx(name).source}\\s*$`) }) });
 }
 
 export function settlePanel(page: Page): Locator {

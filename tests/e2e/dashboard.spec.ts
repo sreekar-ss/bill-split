@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./fixtures";
 import { addExpense, addMember, createGroup, dialog, expectToast, nav, settlePanel, setupUsers } from "./helpers";
 
 test.describe("dashboard and activity", () => {

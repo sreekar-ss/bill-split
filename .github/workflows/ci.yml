@@ -1,0 +1,51 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  pipeline:
+    name: Pipeline (typecheck, lint, unit, integration, build, e2e)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: billsplit
+          POSTGRES_PASSWORD: billsplit
+          POSTGRES_DB: billsplit
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U billsplit"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      # Throwaway CI database only. scripts/test-env.mjs refuses non-localhost hosts.
+      DATABASE_URL: postgresql://billsplit:billsplit@localhost:5432/billsplit_test
+      TEST_DATABASE_URL: postgresql://billsplit:billsplit@localhost:5432/billsplit_test
+      CI: "true"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npm run pipeline
+      - name: Upload test reports
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: reports
+          path: |
+            reports/pipeline.json
+            reports/e2e-html
+            reports/e2e-artifacts
+          retention-days: 7

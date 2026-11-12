@@ -42,6 +42,32 @@ export const resetPasswordSchema = z.object({
   password: z.string().min(8, "Use at least 8 characters.").max(128),
 });
 
+export const claimAccountSchema = z.object({
+  token: z.string().min(20).max(200),
+  name: z.string().trim().min(1, "Enter your name.").max(60, "Keep your name under 60 characters."),
+  password: z.string().min(8, "Use at least 8 characters.").max(128),
+});
+
+/** Add someone by email. `name` is required only when the email has no account yet (creates an invite). */
+export const inviteByEmailSchema = z.object({
+  email,
+  name: z.string().trim().max(60, "Keep the name under 60 characters.").optional(),
+});
+
+const handle = (re: RegExp, msg: string) =>
+  z.string().trim().max(64).optional().transform((v) => (v ? v : undefined)).refine((v) => v === undefined || re.test(v), msg);
+
+export const paymentHandlesSchema = z.object({
+  venmoHandle: handle(/^@?[A-Za-z0-9_-]{5,30}$/, "Venmo usernames are 5–30 letters, numbers, - or _."),
+  paypalMe: handle(/^[A-Za-z0-9]{1,20}$/, "Use just your PayPal.me name, e.g. anaLima."),
+  cashTag: handle(/^\$?[A-Za-z][A-Za-z0-9]{0,19}$/, "Cashtags start with a letter, e.g. $ana."),
+  upiId: handle(/^[A-Za-z0-9._-]{2,256}@[A-Za-z][A-Za-z0-9]{1,64}$/, "UPI IDs look like name@bank."),
+});
+
+export const deleteAccountSchema = z.object({
+  password: z.string().min(1, "Enter your password to confirm."),
+});
+
 export const groupSchema = z.object({
   name: z.string().trim().min(1, "Give the group a name.").max(60, "Keep the name under 60 characters."),
   currency: z.enum(SUPPORTED_CURRENCIES).optional(),

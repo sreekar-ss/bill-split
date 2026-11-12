@@ -56,7 +56,7 @@ describe("group ledger", () => {
 
   it("guards membership", async () => {
     await expect(getGroup(outsider.id, groupId)).rejects.toMatchObject({ code: "NOT_FOUND" });
-    await expect(addMemberByEmail(ana.id, groupId, { email: "nobody@test.dev" })).rejects.toThrow("doesn't have a BillSplit account");
+    await expect(addMemberByEmail(ana.id, groupId, { email: "nobody@test.dev" })).rejects.toMatchObject({ fieldErrors: { name: expect.any(String) } });
     await expect(addMemberByEmail(ana.id, groupId, { email: ben.email })).rejects.toMatchObject({ code: "CONFLICT" });
     await expect(
       createExpense(outsider.id, { groupId, description: "x", amountCents: 100, paidById: outsider.id, date: today, split: { method: "equal", entries: [{ userId: outsider.id }] } }),

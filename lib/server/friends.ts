@@ -1,12 +1,12 @@
 import "server-only";
 import { pairStakeInExpense } from "@/lib/domain/ledger";
-import { emailSchema } from "@/lib/validation";
 import { db, type Tx } from "./db";
 import { AppError, notFound } from "./errors";
 import { computeRelations, directNets } from "./ledger";
-import { parse } from "./parse";
+import { sendClaimInvite } from "./email-tokens";
+import { findOrCreateInvitee } from "./invitees";
 
-const userSummary = { id: true, name: true, email: true } as const;
+const userSummary = { id: true, name: true, email: true, status: true } as const;
 
 function friendshipWhere(a: string, b: string) {
   return {
@@ -54,23 +54,24 @@ export async function listFriends(userId: string) {
 }
 
 export async function addFriendByEmail(userId: string, input: unknown) {
-  const { email } = parse(emailSchema, input);
-  const friend = await db.user.findUnique({ where: { email }, select: { id: true, name: true } });
-  if (!friend) {
-    throw new AppError("That email doesn't have a BillSplit account yet. Ask them to sign up, then add them again.", "NOT_FOUND", {
-      email: "No account uses this email yet.",
-    });
-  }
+  const { user: friend } = await findOrCreateInvitee(db, input);
   if (friend.id === userId) throw new AppError("That's your own email.", "VALIDATION", { email: "That's your own email." });
   if (await areFriends(userId, friend.id)) {
     throw new AppError(`You and ${friend.name} are already friends.`, "CONFLICT", { email: "Already a friend." });
   }
   await ensureFriendship(db, userId, friend.id);
-  return friend;
+  if (friend.status === "placeholder") {
+    const me = await db.user.findUniqueOrThrow({ where: { id: userId }, select: { name: true } });
+    await sendClaimInvite(friend.id, `${me.name} wants to split expenses with you`);
+  }
+  return { id: friend.id, name: friend.name, invited: friend.status === "placeholder" };
 }
 
 export async function getFriend(userId: string, friendId: string) {
-  const friend = await db.user.findUnique({ where: { id: friendId }, select: userSummary });
+  const friend = await db.user.findUnique({
+    where: { id: friendId },
+    select: { ...userSummary, venmoHandle: true, paypalMe: true, cashTag: true, upiId: true },
+  });
   if (!friend || !(await areFriends(userId, friendId))) throw notFound("friend");
 
   const both = { AND: [{ splits: { some: { userId } } }, { splits: { some: { userId: friendId } } }] };

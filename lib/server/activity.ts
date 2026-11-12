@@ -5,7 +5,7 @@ import { db } from "./db";
 import { computeRelations } from "./ledger";
 import { listGroups } from "./groups";
 
-const userSummary = { id: true, name: true } as const;
+const userSummary = { id: true, name: true, status: true } as const;
 
 export type ActivityItem =
   | {

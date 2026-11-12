@@ -1,4 +1,4 @@
-export type AppErrorCode = "UNAUTHENTICATED" | "FORBIDDEN" | "NOT_FOUND" | "VALIDATION" | "CONFLICT";
+export type AppErrorCode = "UNAUTHENTICATED" | "FORBIDDEN" | "NOT_FOUND" | "VALIDATION" | "CONFLICT" | "RATE_LIMITED";
 
 /** An expected, user-presentable failure. `message` is shown to the user verbatim. */
 export class AppError extends Error {

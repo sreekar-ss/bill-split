@@ -10,6 +10,7 @@ export interface CurrentUser {
   email: string;
   name: string;
   defaultCurrency: string;
+  emailVerified: boolean;
 }
 
 export async function startSession(user: { id: string; sessionVersion: number }) {
@@ -35,10 +36,10 @@ export const getCurrentUser = cache(async (): Promise<CurrentUser | null> => {
   if (!session) return null;
   const user = await db.user.findUnique({
     where: { id: session.userId },
-    select: { id: true, email: true, name: true, defaultCurrency: true, sessionVersion: true },
+    select: { id: true, email: true, name: true, defaultCurrency: true, sessionVersion: true, status: true, emailVerified: true },
   });
-  if (!user || user.sessionVersion !== session.v) return null;
-  return { id: user.id, email: user.email, name: user.name, defaultCurrency: user.defaultCurrency };
+  if (!user || user.status !== "active" || user.sessionVersion !== session.v) return null;
+  return { id: user.id, email: user.email, name: user.name, defaultCurrency: user.defaultCurrency, emailVerified: user.emailVerified };
 });
 
 /** Use in pages/layouts/actions that need a user. Redirects to /login when signed out. */

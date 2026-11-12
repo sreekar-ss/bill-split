@@ -1,13 +1,17 @@
 import "server-only";
 import { computeNets, simplifyDebts, stakeInExpense } from "@/lib/domain/ledger";
-import { emailSchema, groupSchema } from "@/lib/validation";
+import { groupSchema } from "@/lib/validation";
 import { db } from "./db";
 import { AppError, forbidden, notFound } from "./errors";
+import { sendClaimInvite } from "./email-tokens";
 import { ensureFriendship } from "./friends";
+import { findOrCreateInvitee } from "./invitees";
 import { loadGroupLedger } from "./ledger";
 import { parse } from "./parse";
 
-const userSummary = { id: true, name: true, email: true } as const;
+const userSummary = { id: true, name: true, email: true, status: true } as const;
+/** Shared only with people who share a group or friendship, for settle-up payment links. */
+const paymentHandles = { venmoHandle: true, paypalMe: true, cashTag: true, upiId: true } as const;
 
 export async function assertGroupMember(groupId: string, userId: string) {
   const member = await db.groupMember.findUnique({ where: { groupId_userId: { groupId, userId } }, select: { role: true } });
@@ -79,7 +83,7 @@ export async function getGroup(userId: string, groupId: string) {
       currency: true,
       createdById: true,
       createdAt: true,
-      members: { select: { role: true, joinedAt: true, user: { select: userSummary } }, orderBy: { joinedAt: "asc" } },
+      members: { select: { role: true, joinedAt: true, user: { select: { ...userSummary, ...paymentHandles } } }, orderBy: { joinedAt: "asc" } },
       expenses: {
         select: {
           id: true,
@@ -119,12 +123,15 @@ export async function getGroup(userId: string, groupId: string) {
   const plan = simplifyDebts(nets);
 
   // People who left the group but still appear in history.
-  const known = new Map(group.members.map((m) => [m.user.id, m.user]));
+  type Person = { id: string; name: string; email: string; status: string };
+  const known = new Map<string, Person>(
+    group.members.map((m) => [m.user.id, { id: m.user.id, name: m.user.name, email: m.user.email, status: m.user.status }]),
+  );
   const missing = [...nets.keys()].filter((id) => !known.has(id));
   if (missing.length) {
     for (const u of await db.user.findMany({ where: { id: { in: missing } }, select: userSummary })) known.set(u.id, u);
   }
-  const person = (id: string) => known.get(id) ?? { id, name: "Former member", email: "" };
+  const person = (id: string): Person => known.get(id) ?? { id, name: "Former member", email: "", status: "deleted" };
 
   return {
     id: group.id,
@@ -191,21 +198,24 @@ export const CURRENCY_LOCKED = "The currency can't change once the group has exp
 
 export async function addMemberByEmail(userId: string, groupId: string, input: unknown) {
   await assertGroupMember(groupId, userId);
-  const { email } = parse(emailSchema, input);
-  const invitee = await db.user.findUnique({ where: { email }, select: { id: true, name: true } });
-  if (!invitee) {
-    throw new AppError("That email doesn't have a BillSplit account yet. Ask them to sign up, then add them again.", "NOT_FOUND", {
-      email: "No account uses this email yet.",
-    });
-  }
-  const existing = await db.groupMember.findUnique({ where: { groupId_userId: { groupId, userId: invitee.id } } });
-  if (existing) throw new AppError(`${invitee.name} is already in this group.`, "CONFLICT", { email: "Already in this group." });
-
-  await db.$transaction(async (tx) => {
+  const result = await db.$transaction(async (tx) => {
+    const { user: invitee, created } = await findOrCreateInvitee(tx, input);
+    const existing = await tx.groupMember.findUnique({ where: { groupId_userId: { groupId, userId: invitee.id } } });
+    if (existing) throw new AppError(`${invitee.name} is already in this group.`, "CONFLICT", { email: "Already in this group." });
     await tx.groupMember.create({ data: { groupId, userId: invitee.id } });
     await ensureFriendship(tx, userId, invitee.id);
+    return { invitee, created };
   });
-  return invitee;
+  const { invitee } = result;
+  // Placeholders (new or not yet claimed) get an email inviting them to set up their account.
+  if (invitee.status === "placeholder") {
+    const [me, group] = await Promise.all([
+      db.user.findUniqueOrThrow({ where: { id: userId }, select: { name: true } }),
+      db.group.findUniqueOrThrow({ where: { id: groupId }, select: { name: true } }),
+    ]);
+    await sendClaimInvite(invitee.id, `${me.name} added you to ${group.name}`);
+  }
+  return { id: invitee.id, name: invitee.name, invited: invitee.status === "placeholder" };
 }
 
 /** Remove a member (or leave, when memberId === userId). Only allowed when their balance is settled. */

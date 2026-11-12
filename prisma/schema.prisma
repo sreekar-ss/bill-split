@@ -22,6 +22,13 @@ model User {
   defaultCurrency String  @default("USD")
   emailVerified Boolean   @default(false)
   sessionVersion Int      @default(0) // bump to invalidate all sessions (e.g. password change)
+  /// active | placeholder (invited by email, not yet claimed) | deleted (anonymised)
+  status        String    @default("active")
+  // Payment handles shown on settle-up (deep links only; BillSplit never moves money)
+  venmoHandle   String?
+  paypalMe      String?
+  cashTag       String?
+  upiId         String?
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
@@ -32,6 +39,7 @@ model User {
   paidExpenses      Expense[]     @relation("ExpensePayer")
   recordedSettlements Settlement[] @relation("SettlementRecorder")
   passwordResetTokens PasswordResetToken[]
+  emailTokens       EmailToken[]
   expenseSplits     ExpenseSplit[]
   paymentsFrom      Settlement[]  @relation("PaymentFrom")
   paymentsTo        Settlement[]  @relation("PaymentTo")
@@ -41,6 +49,7 @@ model User {
   comments          Comment[]
 
   @@index([email])
+  @@index([status])
 }
 
 // Group model
@@ -52,6 +61,9 @@ model Group {
   category    String?  @default("general")
   currency    String   @default("USD")
   createdById String
+  /// Bump to invalidate the group's current invite link (links are HMAC(groupId:version)).
+  inviteVersion Int     @default(0)
+  inviteEnabled Boolean @default(true)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -291,4 +303,26 @@ model PasswordResetToken {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, createdAt])
+}
+
+// Single-use emailed links other than password reset: verify an email, or claim a placeholder account.
+model EmailToken {
+  id        String    @id @default(cuid())
+  userId    String
+  purpose   String    // verify_email | claim_invite
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, purpose, createdAt])
+}
+
+// Fixed-window counters for throttling (login attempts per email / per IP, etc.).
+model RateLimit {
+  key     String   @id
+  count   Int
+  resetAt DateTime
 }

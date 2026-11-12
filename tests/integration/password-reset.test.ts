@@ -11,8 +11,10 @@ async function user() {
   return registerUser({ name: "Rae", email: `rae.reset.${n}@test.dev`, password: "old-password-1" });
 }
 
+const resetMails = () => sentEmails.filter((m) => m.subject === "Reset your BillSplit password");
+
 function lastLinkTo(email: string) {
-  const mail = [...sentEmails].reverse().find((m) => m.to === email);
+  const mail = [...resetMails()].reverse().find((m) => m.to === email);
   const match = mail?.text.match(/https:\/\/app\.example\.test\/reset-password\?token=([\w%-]+)/);
   return match ? decodeURIComponent(match[1]) : null;
 }
@@ -24,16 +26,16 @@ beforeEach(() => {
 describe("password reset", () => {
   it("says nothing about unknown emails and sends nothing", async () => {
     await expect(requestPasswordReset({ email: "nobody-here@test.dev" })).resolves.toBeUndefined();
-    expect(sentEmails).toHaveLength(0);
+    expect(resetMails()).toHaveLength(0);
     await expect(requestPasswordReset({ email: "not-an-email" })).rejects.toMatchObject({ code: "VALIDATION" });
   });
 
   it("emails a single-use link built from APP_URL and stores only a hash", async () => {
     const u = await user();
     await requestPasswordReset({ email: `  ${u.email.toUpperCase()} ` });
-    expect(sentEmails).toHaveLength(1);
-    expect(sentEmails[0]).toMatchObject({ to: u.email, subject: "Reset your BillSplit password" });
-    expect(sentEmails[0].html).toContain("Choose a new password");
+    expect(resetMails()).toHaveLength(1);
+    expect(resetMails()[0]).toMatchObject({ to: u.email });
+    expect(resetMails()[0].html).toContain("Choose a new password");
     const token = lastLinkTo(u.email)!;
     expect(token).toMatch(/^[\w-]{43}$/);
 
@@ -49,7 +51,7 @@ describe("password reset", () => {
     const u = await user();
     await requestPasswordReset({ email: u.email });
     await requestPasswordReset({ email: u.email });
-    expect(sentEmails.filter((m) => m.to === u.email)).toHaveLength(1);
+    expect(resetMails().filter((m) => m.to === u.email)).toHaveLength(1);
   });
 
   it("resets the password, signs out other sessions, and can't be reused", async () => {

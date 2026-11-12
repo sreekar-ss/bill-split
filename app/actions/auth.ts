@@ -4,6 +4,8 @@ import { redirect } from "next/navigation";
 import { endSession, startSession } from "@/lib/auth/session";
 import type { ActionResult } from "@/lib/server/errors";
 import { requestPasswordReset, resetPassword } from "@/lib/server/password-reset";
+import { claimAccount, resendClaimForEmail } from "@/lib/server/email-tokens";
+import { requestMeta } from "@/lib/server/request-meta";
 import { authenticate, registerUser } from "@/lib/server/users";
 import { guard } from "./run";
 
@@ -19,7 +21,7 @@ export type AuthFormState = ActionResult<undefined> | null;
 
 export async function registerAction(_prev: AuthFormState, form: FormData): Promise<AuthFormState> {
   const result = await guard(async () => {
-    const user = await registerUser({ name: form.get("name"), email: form.get("email"), password: form.get("password") });
+    const user = await registerUser({ name: form.get("name"), email: form.get("email"), password: form.get("password") }, await requestMeta());
     await startSession(user);
   });
   if (!result.ok) return result;
@@ -28,7 +30,7 @@ export async function registerAction(_prev: AuthFormState, form: FormData): Prom
 
 export async function loginAction(_prev: AuthFormState, form: FormData): Promise<AuthFormState> {
   const result = await guard(async () => {
-    const user = await authenticate({ email: form.get("email"), password: form.get("password") });
+    const user = await authenticate({ email: form.get("email"), password: form.get("password") }, await requestMeta());
     await startSession(user);
   });
   if (!result.ok) return result;
@@ -51,6 +53,24 @@ export async function resetPasswordAction(_prev: AuthFormState, form: FormData):
   });
   if (!result.ok) return result;
   redirect("/home?reset=1");
+}
+
+/** Placeholder sets up their account from the invite link; signs them in. */
+export async function claimAccountAction(_prev: AuthFormState, form: FormData): Promise<AuthFormState> {
+  const result = await guard(async () => {
+    const user = await claimAccount({ token: form.get("token"), name: form.get("name"), password: form.get("password") });
+    await startSession(user);
+  });
+  if (!result.ok) return result;
+  redirect(safeNext(form.get("next")));
+}
+
+/** From the sign-up page when the email belongs to a pending invite. Always succeeds (no enumeration). */
+export async function resendInviteAction(email: string) {
+  return guard(async () => {
+    if (typeof email === "string" && email.length <= 254) await resendClaimForEmail(email);
+    return undefined;
+  });
 }
 
 export async function logoutAction() {

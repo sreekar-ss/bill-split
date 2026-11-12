@@ -1,9 +1,9 @@
 import "server-only";
-import { stakeInExpense } from "@/lib/domain/ledger";
+import { pairStakeInExpense } from "@/lib/domain/ledger";
 import { emailSchema } from "@/lib/validation";
 import { db, type Tx } from "./db";
 import { AppError, notFound } from "./errors";
-import { computeRelations, directNet } from "./ledger";
+import { computeRelations, directNets } from "./ledger";
 import { parse } from "./parse";
 
 const userSummary = { id: true, name: true, email: true } as const;
@@ -49,8 +49,8 @@ export async function listFriends(userId: string) {
     people.set(other.id, other);
   }
   return [...people.values()]
-    .map((p) => ({ ...p, netCents: relations.get(p.id)?.totalCents ?? 0 }))
-    .sort((a, b) => Math.abs(b.netCents) - Math.abs(a.netCents) || a.name.localeCompare(b.name));
+    .map((p) => ({ ...p, balances: relations.get(p.id)?.totals ?? [] }))
+    .sort((a, b) => Math.abs(b.balances[0]?.cents ?? 0) - Math.abs(a.balances[0]?.cents ?? 0) || a.name.localeCompare(b.name));
 }
 
 export async function addFriendByEmail(userId: string, input: unknown) {
@@ -127,7 +127,8 @@ export async function getFriend(userId: string, friendId: string) {
 
   return {
     friend,
-    netCents: relation?.totalCents ?? 0,
+    /** Per-currency totals with this friend, non-zero only (empty = settled up). */
+    balances: relation?.totals ?? [],
     breakdown: relation?.byContext ?? [],
     expenses: expenses.map((e) => ({
       id: e.id,
@@ -139,7 +140,8 @@ export async function getFriend(userId: string, friendId: string) {
       createdAt: e.createdAt,
       paidBy: e.paidBy,
       group: e.group,
-      myStakeCents: stakeInExpense(userId, { paidById: e.paidById, amountCents: e.amountCents, shares: e.splits }),
+      // Only the part of the expense that's between the two of you, not your stake in the whole group expense.
+      myStakeCents: pairStakeInExpense(userId, friendId, { paidById: e.paidById, amountCents: e.amountCents, shares: e.splits }, e.group !== null),
     })),
     payments: payments.map((p) => ({
       id: p.id,
@@ -159,7 +161,7 @@ export type FriendDetail = Awaited<ReturnType<typeof getFriend>>;
 /** Remove a friend. Only allowed when nothing is owed directly between you (group balances are unaffected). */
 export async function removeFriend(userId: string, friendId: string) {
   if (!(await areFriends(userId, friendId))) throw notFound("friend");
-  if ((await directNet(userId, friendId)) !== 0) {
+  if ((await directNets(userId, friendId)).length > 0) {
     throw new AppError("Settle up your direct balance before removing this friend.", "CONFLICT");
   }
   await db.friendship.deleteMany({ where: friendshipWhere(userId, friendId) });

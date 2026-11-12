@@ -25,8 +25,8 @@ async function resolveContext(userId: string, data: Pick<ParsedExpense, "groupId
   return { participants: [userId, friendId], currency: me.defaultCurrency, direct: true };
 }
 
-function buildShares(data: ParsedExpense, participants: string[], direct: boolean) {
-  const allowed = new Set(participants);
+function buildShares(data: ParsedExpense, participants: string[], direct: boolean, alsoAllowed: string[] = []) {
+  const allowed = new Set([...participants, ...alsoAllowed]);
   const scope = direct ? "you or your friend" : "in this group";
   if (!allowed.has(data.paidById)) {
     throw new AppError(`The person who paid must be ${scope}.`, "VALIDATION", { paidById: `Choose someone ${direct ? "here" : "in this group"}.` });
@@ -144,7 +144,13 @@ export async function updateExpense(userId: string, expenseId: string, input: un
   if (!sameContext) throw new AppError("An expense can't be moved to a different group or friend.", "VALIDATION");
 
   const ctx = await resolveContext(userId, data);
-  const rows = buildShares(data, ctx.participants, ctx.direct);
+  // People who have left the group stay on their old expenses. They can't be settled with any more,
+  // so an edit may keep them on the expense but must not change what they paid or owe.
+  const current = new Set(ctx.participants);
+  const before = [...new Set([existing.paidById, ...existing.splits.map((s) => s.userId)])];
+  const former = ctx.direct ? [] : before.filter((id) => !current.has(id));
+  const rows = buildShares(data, ctx.participants, ctx.direct, former);
+  if (former.length) assertFormerMembersUnchanged(existing, data, rows, former);
   return db.$transaction(async (tx) => {
     await tx.expenseSplit.deleteMany({ where: { expenseId } });
     return tx.expense.update({
@@ -162,6 +168,31 @@ export async function updateExpense(userId: string, expenseId: string, input: un
       select: { id: true, groupId: true },
     });
   });
+}
+
+/** What one person paid minus what they owe on an expense: their effect on the group's balances. */
+function netEffect(userId: string, e: { paidById: string; amountCents: number; splits: { userId: string; amountCents: number }[] }) {
+  const share = e.splits.filter((s) => s.userId === userId).reduce((sum, s) => sum + s.amountCents, 0);
+  return (e.paidById === userId ? e.amountCents : 0) - share;
+}
+
+function assertFormerMembersUnchanged(
+  existing: Awaited<ReturnType<typeof loadAuthorized>>,
+  data: ParsedExpense,
+  rows: { userId: string; amountCents: number }[],
+  former: string[],
+) {
+  const after = { paidById: data.paidById, amountCents: data.amountCents, splits: rows };
+  const changed = former.filter((id) => netEffect(id, existing) !== netEffect(id, after));
+  if (!changed.length) return;
+  const wasPayer = changed.includes(existing.paidById);
+  throw new AppError(
+    wasPayer
+      ? "The person who paid has left this group, so the amount, payer and their share can't change. You can still edit the description, date, category and note."
+      : "Someone on this expense has left the group, so their share can't change. Keep their amount as it was, or ask them to rejoin first.",
+    "VALIDATION",
+    wasPayer ? { split: "The payer has left this group." } : { split: "Keep the share of anyone who has left the group." },
+  );
 }
 
 export async function deleteExpense(userId: string, expenseId: string) {

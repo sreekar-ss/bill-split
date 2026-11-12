@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { formatMoney, type Cents } from "@/lib/domain/money";
 import { cn } from "@/lib/utils/cn";
 
@@ -10,6 +11,8 @@ export interface BeamRow {
   /** Overrides the default words, e.g. "owes you" / "you owe". */
   phrase?: { positive: string; negative: string };
   href?: string;
+  /** Overrides the beam's currency for this row (e.g. one person owing in two currencies). */
+  currency?: string;
 }
 
 /**
@@ -27,23 +30,31 @@ export function BalanceBeam({
   className?: string;
   label?: string;
 }) {
-  const max = Math.max(1, ...rows.map((r) => Math.abs(r.cents)));
+  // Bars are scaled within each currency: amounts in different currencies aren't comparable.
+  const maxByCurrency = new Map<string, number>();
+  for (const r of rows) {
+    const c = r.currency ?? currency;
+    maxByCurrency.set(c, Math.max(maxByCurrency.get(c) ?? 1, Math.abs(r.cents)));
+  }
   const sorted = [...rows].sort((a, b) => b.cents - a.cents);
   return (
     <ul aria-label={label} className={cn("space-y-3", className)}>
       {sorted.map((r) => {
-        const pct = (Math.abs(r.cents) / max) * 50;
+        const rowCurrency = r.currency ?? currency;
+        const pct = (Math.abs(r.cents) / (maxByCurrency.get(rowCurrency) ?? 1)) * 50;
         const words =
           r.cents > 0 ? (r.phrase?.positive ?? "gets back") : r.cents < 0 ? (r.phrase?.negative ?? "owes") : "settled up";
-        const Row = r.href ? "a" : "div";
         return (
-          <li key={r.id}>
-            <Row href={r.href} className={cn("block rounded-[6px]", r.href && "hover:bg-ink/[0.03] -mx-1 px-1")}>
+          <li key={`${r.id}-${rowCurrency}`}>
+            <RowShell href={r.href}>
               <div className="flex items-baseline justify-between gap-3">
-                <span className="truncate font-semibold">{r.name}</span>
+                <span className="truncate font-semibold">
+                  {r.name}{" "}
+                </span>
                 <span className={cn("shrink-0 text-body-sm", r.cents > 0 ? "text-owed" : r.cents < 0 ? "text-owe" : "text-ink-muted")}>
                   {words}
-                  {r.cents !== 0 && <span className="num ml-1 font-bold">{formatMoney(r.cents, currency, { abs: true })}</span>}
+                  {r.cents !== 0 && " "}
+                  {r.cents !== 0 && <span className="num font-bold">{formatMoney(r.cents, rowCurrency, { abs: true })}</span>}
                 </span>
               </div>
               <div className="relative mt-1.5 h-2" aria-hidden>
@@ -59,10 +70,19 @@ export function BalanceBeam({
                   />
                 )}
               </div>
-            </Row>
+            </RowShell>
           </li>
         );
       })}
     </ul>
+  );
+}
+
+function RowShell({ href, children }: { href?: string; children: React.ReactNode }) {
+  if (!href) return <div className="block rounded-[6px]">{children}</div>;
+  return (
+    <Link href={href} className="-mx-1 block rounded-[6px] px-1 hover:bg-ink/[0.03]">
+      {children}
+    </Link>
   );
 }

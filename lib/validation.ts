@@ -67,6 +67,8 @@ export const paymentSchema = z
     fromUserId: id,
     toUserId: id,
     amountCents: cents,
+    /** Direct payments only: the currency of the balance being settled. Group payments use the group's. */
+    currency: z.enum(SUPPORTED_CURRENCIES).optional(),
     date: isoDate.optional(),
     note: z.string().trim().max(200).optional(),
   })

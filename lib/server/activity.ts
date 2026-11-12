@@ -121,19 +121,35 @@ export async function getDashboard(userId: string) {
   const users = await db.user.findMany({ where: { id: { in: ids } }, select: { id: true, name: true, email: true } });
   const byId = new Map(users.map((u) => [u.id, u]));
 
+  // One entry per person and currency: amounts in different currencies are never added together.
   const people = ids
-    .map((id) => ({ user: byId.get(id) ?? { id, name: "Unknown", email: "" }, ...relations.get(id)! }))
-    .filter((p) => p.totalCents !== 0)
-    .sort((a, b) => Math.abs(b.totalCents) - Math.abs(a.totalCents));
+    .flatMap((id) => {
+      const person = byId.get(id) ?? { id, name: "Unknown", email: "" };
+      return relations.get(id)!.totals.map((t) => ({ user: person, currency: t.currency, cents: t.cents }));
+    })
+    .sort((a, b) => Math.abs(b.cents) - Math.abs(a.cents));
 
-  const owedToMeCents = people.filter((p) => p.totalCents > 0).reduce((s, p) => s + p.totalCents, 0);
-  const iOweCents = people.filter((p) => p.totalCents < 0).reduce((s, p) => s - p.totalCents, 0);
+  const byCurrency = new Map<string, { currency: string; owedToMeCents: number; iOweCents: number }>();
+  for (const p of people) {
+    const t = byCurrency.get(p.currency) ?? { currency: p.currency, owedToMeCents: 0, iOweCents: 0 };
+    if (p.cents > 0) t.owedToMeCents += p.cents;
+    else t.iOweCents -= p.cents;
+    byCurrency.set(p.currency, t);
+  }
+  // The default currency first, so a single-currency user sees one summary.
+  const totals = [...byCurrency.values()]
+    .map((t) => ({ ...t, netCents: t.owedToMeCents - t.iOweCents }))
+    .sort(
+      (a, b) =>
+        Number(b.currency === user.defaultCurrency) - Number(a.currency === user.defaultCurrency) ||
+        b.owedToMeCents + b.iOweCents - (a.owedToMeCents + a.iOweCents),
+    );
 
   return {
+    /** The user's default currency (used when there's nothing owed at all). */
     currency: user.defaultCurrency,
-    owedToMeCents,
-    iOweCents,
-    netCents: owedToMeCents - iOweCents,
+    /** One summary per currency with a non-zero balance; empty when everything is settled. */
+    totals,
     people,
     groups,
     recent,

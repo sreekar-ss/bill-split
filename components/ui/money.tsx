@@ -35,7 +35,7 @@ export function BalanceLabel({ cents, currency = "USD", className }: { cents: Ce
   if (cents === 0) return <span className={cn("text-body-sm text-ink-muted", className)}>settled up</span>;
   return (
     <span className={cn("flex flex-col items-end leading-tight", className)}>
-      <span className={cn("text-meta", cents > 0 ? "text-owed" : "text-owe")}>{cents > 0 ? "owes you" : "you owe"}</span>
+      <span className={cn("text-meta", cents > 0 ? "text-owed" : "text-owe")}>{cents > 0 ? "owes you" : "you owe"} </span>
       <Money cents={cents} currency={currency} tone="signed" className="font-bold" />
     </span>
   );

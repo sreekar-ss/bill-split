@@ -11,10 +11,30 @@ import { db } from "./db";
 
 export type ContextRef = { kind: "group"; groupId: string; name: string; currency: string } | { kind: "direct"; currency: string };
 
+/** An amount in one currency. Amounts in different currencies are never added together (no FX in MVP1). */
+export interface CurrencyAmount {
+  currency: string;
+  cents: Cents;
+}
+
 export interface Relation {
-  /** + they owe me, − I owe them */
-  totalCents: Cents;
+  /** Per-currency totals, non-zero only: + they owe me, − I owe them. */
+  totals: CurrencyAmount[];
   byContext: { context: ContextRef; cents: Cents }[];
+}
+
+/** Adds `cents` to the matching currency bucket in `totals` (mutates). */
+export function addToTotals(totals: CurrencyAmount[], currency: string, cents: Cents) {
+  const t = totals.find((x) => x.currency === currency);
+  if (t) t.cents += cents;
+  else totals.push({ currency, cents });
+}
+
+/** Drops zero totals and orders them: the `primary` currency first, then the largest amounts. */
+export function tidyTotals(totals: CurrencyAmount[], primary: string): CurrencyAmount[] {
+  return totals
+    .filter((t) => t.cents !== 0)
+    .sort((a, b) => Number(b.currency === primary) - Number(a.currency === primary) || Math.abs(b.cents) - Math.abs(a.cents));
 }
 
 const ledgerExpenseSelect = {
@@ -57,10 +77,10 @@ export async function computeRelations(userId: string): Promise<Map<string, Rela
         },
       },
     }),
-    db.expense.findMany({ where: { groupId: null, splits: { some: { userId } } }, select: ledgerExpenseSelect }),
+    db.expense.findMany({ where: { groupId: null, splits: { some: { userId } } }, select: { ...ledgerExpenseSelect, currency: true } }),
     db.settlement.findMany({
       where: { groupId: null, OR: [{ fromUserId: userId }, { toUserId: userId }] },
-      select: { fromUserId: true, toUserId: true, amountCents: true },
+      select: { fromUserId: true, toUserId: true, amountCents: true, currency: true },
     }),
   ]);
 
@@ -68,8 +88,8 @@ export async function computeRelations(userId: string): Promise<Map<string, Rela
   const addRelations = (context: ContextRef, transfers: Transfer[]) => {
     for (const [other, cents] of relationsFor(userId, transfers)) {
       if (cents === 0) continue;
-      const rel = relations.get(other) ?? { totalCents: 0, byContext: [] };
-      rel.totalCents += cents;
+      const rel = relations.get(other) ?? { totals: [], byContext: [] };
+      addToTotals(rel.totals, context.currency, cents);
       rel.byContext.push({ context, cents });
       relations.set(other, rel);
     }
@@ -80,33 +100,39 @@ export async function computeRelations(userId: string): Promise<Map<string, Rela
     addRelations({ kind: "group", groupId: group.id, name: group.name, currency: group.currency }, simplifyDebts(nets));
   }
 
-  // Direct context: bucket by the other person, then net each pair.
-  const byFriend = new Map<string, { expenses: LedgerExpense[]; payments: LedgerPayment[] }>();
-  const bucket = (other: string) => {
-    let b = byFriend.get(other);
-    if (!b) byFriend.set(other, (b = { expenses: [], payments: [] }));
+  // Direct context: bucket by the other person and by the currency each record was made in
+  // (a pair can have direct expenses in several currencies), then net each bucket.
+  const direct = new Map<string, { currency: string; expenses: LedgerExpense[]; payments: LedgerPayment[] }>();
+  const bucket = (other: string, currency: string) => {
+    const key = `${other}\u0000${currency}`;
+    let b = direct.get(key);
+    if (!b) direct.set(key, (b = { currency, expenses: [], payments: [] }));
     return b;
   };
   for (const e of directExpenses) {
     const other = e.splits.find((s) => s.userId !== userId)?.userId ?? (e.paidById !== userId ? e.paidById : undefined);
-    if (other) bucket(other).expenses.push(toLedger(e));
+    if (other) bucket(other, e.currency).expenses.push(toLedger(e));
   }
   for (const p of directPayments) {
-    bucket(p.fromUserId === userId ? p.toUserId : p.fromUserId).payments.push(p);
+    bucket(p.fromUserId === userId ? p.toUserId : p.fromUserId, p.currency).payments.push(p);
   }
-  for (const b of byFriend.values()) {
-    addRelations({ kind: "direct", currency: user.defaultCurrency }, simplifyDebts(computeNets(b.expenses, b.payments)));
+  for (const b of direct.values()) {
+    addRelations({ kind: "direct", currency: b.currency }, simplifyDebts(computeNets(b.expenses, b.payments)));
   }
 
+  for (const rel of relations.values()) rel.totals = tidyTotals(rel.totals, user.defaultCurrency);
   return relations;
 }
 
-/** Signed net for the direct (non-group) context between two users. + other owes me. */
-export async function directNet(userId: string, otherId: string): Promise<Cents> {
+/**
+ * Signed nets for the direct (non-group) context between two users, one per currency, non-zero
+ * only. + other owes me.
+ */
+export async function directNets(userId: string, otherId: string): Promise<CurrencyAmount[]> {
   const [expenses, payments] = await Promise.all([
     db.expense.findMany({
       where: { groupId: null, AND: [{ splits: { some: { userId } } }, { splits: { some: { userId: otherId } } }] },
-      select: ledgerExpenseSelect,
+      select: { ...ledgerExpenseSelect, currency: true },
     }),
     db.settlement.findMany({
       where: {
@@ -116,8 +142,18 @@ export async function directNet(userId: string, otherId: string): Promise<Cents>
           { fromUserId: otherId, toUserId: userId },
         ],
       },
-      select: { fromUserId: true, toUserId: true, amountCents: true },
+      select: { fromUserId: true, toUserId: true, amountCents: true, currency: true },
     }),
   ]);
-  return computeNets(expenses.map(toLedger), payments).get(userId) ?? 0;
+  const currencies = new Set([...expenses.map((e) => e.currency), ...payments.map((p) => p.currency)]);
+  return [...currencies]
+    .map((currency) => ({
+      currency,
+      cents:
+        computeNets(
+          expenses.filter((e) => e.currency === currency).map(toLedger),
+          payments.filter((p) => p.currency === currency),
+        ).get(userId) ?? 0,
+    }))
+    .filter((t) => t.cents !== 0);
 }

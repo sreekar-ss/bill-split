@@ -11,8 +11,8 @@ export const buttonVariants = cva(
         primary: "bg-ink text-surface hover:bg-ink/90",
         secondary: "border border-field bg-surface text-ink hover:bg-paper",
         ghost: "text-ink hover:bg-ink/5",
-        destructive: "border border-rule bg-surface text-owe hover:bg-owe/5",
-        danger: "bg-owe text-white hover:bg-owe/90",
+        destructive: "border border-field bg-surface text-owe hover:bg-owe/5",
+        danger: "bg-owe text-on-owe hover:bg-owe/90",
         highlight: "bg-highlight text-highlight-ink shadow-lift hover:brightness-95",
       },
       size: {

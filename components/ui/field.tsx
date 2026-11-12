@@ -5,7 +5,7 @@ import { forwardRef, useId } from "react";
 import { cn } from "@/lib/utils/cn";
 
 const control =
-  "w-full rounded-[10px] border border-field bg-surface px-3 text-[1rem] text-ink placeholder:text-ink-muted/80 focus-visible:outline-2 focus-visible:outline-offset-0 focus-visible:outline-focus aria-[invalid=true]:border-owe disabled:opacity-60";
+  "w-full rounded-[10px] border border-field bg-surface px-3 text-[1rem] text-ink placeholder:text-ink-muted focus-visible:outline-2 focus-visible:outline-offset-0 focus-visible:outline-focus aria-[invalid=true]:border-owe disabled:opacity-60";
 
 export const Input = forwardRef<HTMLInputElement, React.InputHTMLAttributes<HTMLInputElement>>(function Input({ className, ...props }, ref) {
   return <input ref={ref} className={cn(control, "h-11", className)} {...props} />;
@@ -72,7 +72,7 @@ export function Field({
 export function FormError({ message }: { message?: string | null }) {
   if (!message) return null;
   return (
-    <p role="alert" className="rounded-[10px] border border-owe/30 bg-owe/5 px-3 py-2 text-body-sm text-owe">
+    <p role="alert" tabIndex={-1} data-form-error className="rounded-[10px] border border-owe/30 bg-owe/5 px-3 py-2 text-body-sm text-owe">
       {message}
     </p>
   );

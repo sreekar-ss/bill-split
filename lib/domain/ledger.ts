@@ -96,3 +96,16 @@ export function stakeInExpense(me: string, e: LedgerExpense): Cents {
   const myShare = e.shares.find((s) => s.userId === me)?.amountCents ?? 0;
   return (e.paidById === me ? e.amountCents : 0) - myShare;
 }
+
+/**
+ * What one expense moves between me and one friend: + they owe me, − I owe them.
+ * A direct expense is entirely between the two of us. In a group expense it's the friend's share
+ * when I paid, minus my share when they paid, and nothing when someone else paid.
+ */
+export function pairStakeInExpense(me: string, friend: string, e: LedgerExpense, inGroup: boolean): Cents {
+  if (!inGroup) return stakeInExpense(me, e);
+  const shareOf = (id: string) => e.shares.find((s) => s.userId === id)?.amountCents ?? 0;
+  if (e.paidById === me) return shareOf(friend);
+  if (e.paidById === friend) return -shareOf(me);
+  return 0;
+}

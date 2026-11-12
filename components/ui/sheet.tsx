@@ -3,6 +3,7 @@
 import { Dialog } from "radix-ui";
 import { X } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
+import { useReturnFocus } from "./return-focus";
 
 /**
  * Bottom sheet on mobile, centred dialog from md up (DESIGN.md → Sheets).
@@ -25,12 +26,13 @@ export function Sheet({
   footer?: React.ReactNode;
   className?: string;
 }) {
+  const onCloseAutoFocus = useReturnFocus(open);
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Portal>
         <Dialog.Overlay className="animate-fade fixed inset-0 z-50 bg-[#0b1430]/45" />
         <Dialog.Content
-          aria-describedby={description ? undefined : undefined}
+          onCloseAutoFocus={onCloseAutoFocus}
           className={cn(
             "animate-sheet fixed inset-x-0 bottom-0 z-50 flex max-h-[92dvh] flex-col rounded-t-[20px] bg-surface text-ink shadow-lift",
             "md:inset-x-auto md:bottom-auto md:left-1/2 md:top-[8vh] md:max-h-[84vh] md:w-[min(560px,calc(100vw-48px))] md:-translate-x-1/2 md:rounded-[20px]",

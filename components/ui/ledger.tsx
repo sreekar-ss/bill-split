@@ -1,14 +1,18 @@
 import Link from "next/link";
+import { formatDay } from "@/lib/domain/dates";
 import { formatMoney, type Cents } from "@/lib/domain/money";
 import { cn } from "@/lib/utils/cn";
 
-/** Month abbreviation over day number (UTC calendar date). */
+/** Month abbreviation over day number (UTC calendar date). Screen readers get the date as one phrase. */
 export function DateBlock({ date }: { date: Date | string }) {
   const d = new Date(date);
   return (
-    <span className="flex w-10 shrink-0 flex-col items-center leading-none text-ink-muted" aria-hidden>
-      <span className="text-meta">{new Intl.DateTimeFormat("en-US", { month: "short", timeZone: "UTC" }).format(d)}</span>
-      <span className="num mt-0.5 text-[1.25rem] font-semibold text-ink">{d.getUTCDate()}</span>
+    <span className="w-10 shrink-0">
+      <span className="flex flex-col items-center leading-none text-ink-muted" aria-hidden>
+        <span className="text-meta">{new Intl.DateTimeFormat("en-US", { month: "short", timeZone: "UTC" }).format(d)}</span>
+        <span className="num mt-0.5 text-[1.25rem] font-semibold text-ink">{d.getUTCDate()}</span>
+      </span>
+      <span className="sr-only">{formatDay(d)},</span>
     </span>
   );
 }
@@ -33,11 +37,12 @@ export function LedgerRow({
 }) {
   const inner = (
     <>
-      {leading}
+      {leading}{" "}
       <span className="min-w-0 flex-1">
-        <span className="block truncate font-medium">{title}</span>
-        {meta ? <span className="block truncate text-meta text-ink-muted">{meta}</span> : null}
+        <span className="block truncate font-medium">{title} </span>
+        {meta ? <span className="block truncate text-meta text-ink-muted"> {meta}</span> : null}
       </span>
+      {" "}
       {trailing ? <span className="min-w-[84px] shrink-0 text-right">{trailing}</span> : null}
     </>
   );
@@ -53,7 +58,7 @@ export function StakeLabel({ cents, currency = "USD", involved = true }: { cents
   if (cents === 0) return <span className="text-meta text-ink-muted">no balance</span>;
   return (
     <span className="flex flex-col items-end leading-tight">
-      <span className={cn("text-meta", cents > 0 ? "text-owed" : "text-owe")}>{cents > 0 ? "you lent" : "you borrowed"}</span>
+      <span className={cn("text-meta", cents > 0 ? "text-owed" : "text-owe")}>{cents > 0 ? "you lent" : "you borrowed"} </span>
       <span className={cn("num font-bold", cents > 0 ? "text-owed" : "text-owe")}>{formatMoney(cents, currency, { abs: true })}</span>
     </span>
   );
@@ -63,7 +68,7 @@ export function StakeLabel({ cents, currency = "USD", involved = true }: { cents
 export function PaymentLabel({ cents, currency = "USD" }: { cents: Cents; currency?: string }) {
   return (
     <span className="flex flex-col items-end leading-tight">
-      <span className="text-meta text-ink-muted">payment</span>
+      <span className="text-meta text-ink-muted">payment </span>
       <span className="num font-bold">{formatMoney(cents, currency)}</span>
     </span>
   );

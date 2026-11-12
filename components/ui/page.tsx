@@ -48,7 +48,8 @@ export function Skeleton({ className }: { className?: string }) {
 /** Generic page skeleton for loading.tsx files. */
 export function PageSkeleton({ rows = 6 }: { rows?: number }) {
   return (
-    <div aria-busy="true" aria-label="Loading">
+    <div role="status" aria-busy="true">
+      <span className="sr-only">Loading…</span>
       <Skeleton className="mb-6 h-8 w-40" />
       <Skeleton className="mb-8 h-32 w-full rounded-[20px]" />
       {Array.from({ length: rows }, (_, i) => (

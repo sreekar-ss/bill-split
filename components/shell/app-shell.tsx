@@ -79,7 +79,7 @@ export function AppShell({ contexts, children }: { contexts: ExpenseContexts; ch
           </ul>
         </nav>
 
-        <main id="main" className="mx-auto w-full min-w-0 max-w-[1100px] px-4 pb-36 pt-6 md:px-6 lg:pb-12 lg:pt-10">
+        <main id="main" className="mx-auto w-full min-w-0 max-w-[1100px] px-4 pb-[calc(160px+env(safe-area-inset-bottom))] pt-6 md:px-6 lg:pb-12 lg:pt-10">
           {children}
         </main>
       </div>
@@ -89,7 +89,7 @@ export function AppShell({ contexts, children }: { contexts: ExpenseContexts; ch
         <button
           type="button"
           onClick={() => openAddExpense(routePreset)}
-          className="fixed bottom-[calc(84px+16px+env(safe-area-inset-bottom)/2)] right-4 z-30 inline-flex h-[52px] items-center gap-2 rounded-full bg-highlight pl-4 pr-[22px] font-semibold text-highlight-ink shadow-lift hover:brightness-95 lg:hidden"
+          className="fixed bottom-[calc(84px+env(safe-area-inset-bottom))] right-4 z-30 inline-flex h-[52px] items-center gap-2 rounded-full bg-highlight pl-4 pr-[22px] font-semibold text-highlight-ink shadow-lift hover:brightness-95 lg:hidden"
         >
           <Plus className="size-5" aria-hidden />
           Add expense

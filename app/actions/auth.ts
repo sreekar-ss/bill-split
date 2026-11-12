@@ -9,7 +9,9 @@ import { guard } from "./run";
 /** Only allow same-site relative redirects after login. */
 function safeNext(value: FormDataEntryValue | null): string {
   const next = typeof value === "string" ? value : "";
-  return next.startsWith("/") && !next.startsWith("//") ? next : "/home";
+  // "//host" and "/\\host" are protocol-relative in browsers; control characters can smuggle either.
+  const safe = next.startsWith("/") && !next.startsWith("//") && !next.startsWith("/\\") && !/[\u0000-\u001f\\]/.test(next);
+  return safe ? next : "/home";
 }
 
 export type AuthFormState = ActionResult<undefined> | null;

@@ -132,6 +132,10 @@ export async function getGroup(userId: string, groupId: string) {
     currency: group.currency,
     createdById: group.createdById,
     isAdmin: group.members.some((m) => m.user.id === userId && m.role === "admin") || group.createdById === userId,
+    /** The currency is fixed once anything has been recorded in it. */
+    currencyLocked: group.expenses.length + group.settlements.length > 0,
+    /** Everyone's balance is zero (deleting is only allowed then). */
+    settled: [...nets.values()].every((cents) => cents === 0),
     members: group.members.map((m) => ({ ...m.user, role: m.role, netCents: nets.get(m.user.id) ?? 0 })),
     myNetCents: nets.get(userId) ?? 0,
     plan: plan.map((t) => ({ from: person(t.fromUserId), to: person(t.toUserId), amountCents: t.amountCents })),
@@ -161,15 +165,29 @@ export async function getGroup(userId: string, groupId: string) {
 }
 export type GroupDetail = Awaited<ReturnType<typeof getGroup>>;
 
+/**
+ * Rename a group (any member). The currency can only change while the group has no expenses or
+ * payments: amounts are stored in the currency they were recorded in and MVP1 doesn't convert.
+ */
 export async function updateGroup(userId: string, groupId: string, input: unknown) {
   await assertGroupMember(groupId, userId);
   const data = parse(groupSchema, input);
+  const group = await db.group.findUniqueOrThrow({
+    where: { id: groupId },
+    select: { currency: true, _count: { select: { expenses: true, settlements: true } } },
+  });
+  const changesCurrency = Boolean(data.currency && data.currency !== group.currency);
+  if (changesCurrency && group._count.expenses + group._count.settlements > 0) {
+    throw new AppError(CURRENCY_LOCKED, "CONFLICT", { currency: CURRENCY_LOCKED });
+  }
   return db.group.update({
     where: { id: groupId },
-    data: { name: data.name, ...(data.currency ? { currency: data.currency } : {}) },
+    data: { name: data.name, ...(changesCurrency ? { currency: data.currency } : {}) },
     select: { id: true, name: true, currency: true },
   });
 }
+
+export const CURRENCY_LOCKED = "The currency can't change once the group has expenses or payments.";
 
 export async function addMemberByEmail(userId: string, groupId: string, input: unknown) {
   await assertGroupMember(groupId, userId);
@@ -221,6 +239,11 @@ export async function deleteGroup(userId: string, groupId: string) {
   const me = await assertGroupMember(groupId, userId);
   const group = await db.group.findUniqueOrThrow({ where: { id: groupId }, select: { createdById: true } });
   if (me.role !== "admin" && group.createdById !== userId) throw forbidden("Only the group's admin can delete it.");
+  // Deleting removes every expense and payment with it, so it would wipe out what people are owed.
+  const { nets } = await loadGroupLedger(groupId);
+  if ([...nets.values()].some((cents) => cents !== 0)) {
+    throw new AppError("Settle up everyone's balance before deleting this group.", "CONFLICT");
+  }
   await db.group.delete({ where: { id: groupId } });
 }
 

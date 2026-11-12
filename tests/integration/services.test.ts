@@ -159,19 +159,19 @@ describe("friends, direct expenses, dashboard, activity", () => {
     });
 
     const detail = await getFriend(me.id, maya.id);
-    expect(detail.netCents).toBe(3500);
+    expect(detail.balances).toEqual([{ currency: "USD", cents: 3500 }]);
     expect(detail.breakdown.map((b) => [b.context.kind, b.cents]).sort()).toEqual([["direct", 5000], ["group", -1500]]);
     expect(detail.expenses.map((e) => e.description).sort()).toEqual(["Groceries", "Internet"]);
     await expect(getFriend(stranger.id, maya.id)).rejects.toMatchObject({ code: "NOT_FOUND" });
 
     const dash = await getDashboard(me.id);
-    expect(dash).toMatchObject({ owedToMeCents: 3500, iOweCents: 0, netCents: 3500 });
-    expect((await getDashboard(maya.id)).iOweCents).toBe(3500);
+    expect(dash.totals).toEqual([{ currency: "USD", owedToMeCents: 3500, iOweCents: 0, netCents: 3500 }]);
+    expect((await getDashboard(maya.id)).totals).toEqual([{ currency: "USD", owedToMeCents: 0, iOweCents: 3500, netCents: -3500 }]);
 
     await expect(removeFriend(me.id, maya.id)).rejects.toThrow("Settle up");
     await expect(recordPayment(me.id, { friendId: maya.id, fromUserId: stranger.id, toUserId: me.id, amountCents: 100 })).rejects.toThrow();
     await recordPayment(maya.id, { friendId: me.id, fromUserId: maya.id, toUserId: me.id, amountCents: 5000 });
-    expect((await getFriend(me.id, maya.id)).netCents).toBe(-1500);
+    expect((await getFriend(me.id, maya.id)).balances).toEqual([{ currency: "USD", cents: -1500 }]);
 
     const activity = await listActivity(me.id);
     expect(activity.map((a) => a.type)).toEqual(["payment", "expense", "expense"]);
@@ -179,5 +179,154 @@ describe("friends, direct expenses, dashboard, activity", () => {
 
     await removeFriend(me.id, maya.id);
     expect(await listFriends(me.id)).toEqual([]);
+  });
+});
+
+describe("currencies", () => {
+  it("never adds balances in different currencies together", async () => {
+    const [me, ben, maya] = await Promise.all([user("Cur"), user("Ben"), user("Maya")]);
+    // A EUR trip: I paid €90 split with Ben, so Ben owes me €45.
+    const trip = await createGroup(me.id, { name: "Lisbon", currency: "EUR" });
+    await addMemberByEmail(me.id, trip.id, { email: ben.email });
+    await createExpense(me.id, {
+      groupId: trip.id, description: "Hotel", amountCents: 9000, paidById: me.id, date: today,
+      split: { method: "equal", entries: [{ userId: me.id }, { userId: ben.id }] },
+    });
+    // A USD direct expense: Maya paid $20 split with me, so I owe Maya $10.
+    await addFriendByEmail(me.id, { email: maya.email });
+    await createExpense(maya.id, {
+      friendId: me.id, description: "Lunch", amountCents: 2000, paidById: maya.id, date: today,
+      split: { method: "equal", entries: [{ userId: me.id }, { userId: maya.id }] },
+    });
+
+    const dash = await getDashboard(me.id);
+    expect(dash.totals).toEqual([
+      { currency: "USD", owedToMeCents: 0, iOweCents: 1000, netCents: -1000 },
+      { currency: "EUR", owedToMeCents: 4500, iOweCents: 0, netCents: 4500 },
+    ]);
+    expect(dash.people.map((p) => [p.user.name, p.currency, p.cents])).toEqual([
+      ["Ben", "EUR", 4500],
+      ["Maya", "USD", -1000],
+    ]);
+    expect((await listFriends(me.id)).find((f) => f.id === ben.id)?.balances).toEqual([{ currency: "EUR", cents: 4500 }]);
+
+    // Direct balances keep the currency they were recorded in, even after a default-currency change.
+    await updateProfile(me.id, { name: "Cur", defaultCurrency: "GBP" });
+    const maya1 = await getFriend(me.id, maya.id);
+    expect(maya1.balances).toEqual([{ currency: "USD", cents: -1000 }]);
+    expect(maya1.breakdown).toEqual([{ context: { kind: "direct", currency: "USD" }, cents: -1000 }]);
+
+    // Settling the USD balance from a GBP-default account records a USD payment that clears it.
+    await recordPayment(me.id, { friendId: maya.id, fromUserId: me.id, toUserId: maya.id, amountCents: 1000, currency: "USD" });
+    expect((await getFriend(me.id, maya.id)).balances).toEqual([]);
+    await removeFriend(me.id, maya.id);
+  });
+
+  it("blocks removing a friend while any direct currency is unsettled", async () => {
+    const [me, maya] = await Promise.all([user("Rem"), user("Maya")]);
+    await addFriendByEmail(me.id, { email: maya.email });
+    await createExpense(me.id, {
+      friendId: maya.id, description: "Tickets", amountCents: 3000, paidById: me.id, date: today,
+      split: { method: "equal", entries: [{ userId: me.id }, { userId: maya.id }] },
+    });
+    // A payment in another currency must not cancel it out.
+    await recordPayment(maya.id, { friendId: me.id, fromUserId: maya.id, toUserId: me.id, amountCents: 1500, currency: "EUR" });
+    await expect(removeFriend(me.id, maya.id)).rejects.toThrow("Settle up");
+  });
+});
+
+describe("review fixes", () => {
+  it("editing an expense keeps the shares of people who have left the group, and can't change them", async () => {
+    const [a, b, c] = await Promise.all([user("Ann"), user("Bo"), user("Cat")]);
+    const g = await createGroup(a.id, { name: "Cabin" });
+    await addMemberByEmail(a.id, g.id, { email: b.email });
+    await addMemberByEmail(a.id, g.id, { email: c.email });
+    const all = [{ userId: a.id }, { userId: b.id }, { userId: c.id }];
+    const e = await createExpense(a.id, { groupId: g.id, description: "Grocerys", amountCents: 9000, paidById: a.id, date: today, split: { method: "equal", entries: all } });
+    // Cat settles up and leaves.
+    await recordPayment(c.id, { groupId: g.id, fromUserId: c.id, toUserId: a.id, amountCents: 3000 });
+    await removeMember(c.id, g.id, c.id);
+
+    // Fixing a typo keeps Cat's share, so nobody's balance moves.
+    await updateExpense(a.id, e.id, { groupId: g.id, description: "Groceries", amountCents: 9000, paidById: a.id, date: today, split: { method: "equal", entries: all } });
+    let detail = await getGroup(a.id, g.id);
+    expect(detail.myNetCents).toBe(3000);
+    expect((await getExpense(a.id, e.id)).shares.map((s) => s.amountCents)).toEqual([3000, 3000, 3000]);
+
+    // Dropping Cat, or changing the amount, would move a balance nobody can settle any more.
+    await expect(
+      updateExpense(a.id, e.id, { groupId: g.id, description: "Groceries", amountCents: 9000, paidById: a.id, date: today, split: { method: "equal", entries: all.slice(0, 2) } }),
+    ).rejects.toMatchObject({ code: "VALIDATION", fieldErrors: { split: expect.any(String) } });
+    await expect(
+      updateExpense(a.id, e.id, { groupId: g.id, description: "Groceries", amountCents: 12000, paidById: a.id, date: today, split: { method: "equal", entries: all } }),
+    ).rejects.toThrow("left the group");
+    // An exact split that keeps Cat's amount can still move money between current members.
+    await updateExpense(a.id, e.id, {
+      groupId: g.id, description: "Groceries", amountCents: 9000, paidById: a.id, date: today,
+      split: { method: "exact", entries: [{ userId: a.id, value: 2000 }, { userId: b.id, value: 4000 }, { userId: c.id, value: 3000 }] },
+    });
+    detail = await getGroup(a.id, g.id);
+    expect(detail.myNetCents).toBe(4000);
+    expect(detail.plan.every((t) => t.from.id !== c.id && t.to.id !== c.id)).toBe(true);
+  });
+
+  it("an expense whose payer has left can be edited only in ways that keep the payer's balance", async () => {
+    const [a, b] = await Promise.all([user("Ann"), user("Bo")]);
+    const g = await createGroup(a.id, { name: "Flatshare" });
+    await addMemberByEmail(a.id, g.id, { email: b.email });
+    const split = { method: "equal" as const, entries: [{ userId: a.id }, { userId: b.id }] };
+    const e = await createExpense(b.id, { groupId: g.id, description: "Rent", amountCents: 6000, paidById: b.id, date: today, split });
+    await recordPayment(a.id, { groupId: g.id, fromUserId: a.id, toUserId: b.id, amountCents: 3000 });
+    await removeMember(b.id, g.id, b.id);
+
+    await updateExpense(a.id, e.id, { groupId: g.id, description: "Rent (March)", amountCents: 6000, paidById: b.id, date: today, split, category: "housing" });
+    expect((await getExpense(a.id, e.id)).description).toBe("Rent (March)");
+    await expect(
+      updateExpense(a.id, e.id, { groupId: g.id, description: "Rent", amountCents: 6000, paidById: a.id, date: today, split }),
+    ).rejects.toThrow("The person who paid has left this group");
+  });
+
+  it("locks a group's currency once anything is recorded", async () => {
+    const [a, b] = await Promise.all([user("Ann"), user("Bo")]);
+    const g = await createGroup(a.id, { name: "Trip", currency: "USD" });
+    await expect(updateGroup(a.id, g.id, { name: "Trip", currency: "EUR" })).resolves.toMatchObject({ currency: "EUR" });
+    expect((await getGroup(a.id, g.id)).currencyLocked).toBe(false);
+    await addMemberByEmail(a.id, g.id, { email: b.email });
+    await createExpense(a.id, { groupId: g.id, description: "Bus", amountCents: 1000, paidById: a.id, date: today, split: { method: "equal", entries: [{ userId: a.id }, { userId: b.id }] } });
+    expect((await getGroup(a.id, g.id)).currencyLocked).toBe(true);
+    await expect(updateGroup(b.id, g.id, { name: "Trip", currency: "INR" })).rejects.toMatchObject({
+      code: "CONFLICT",
+      fieldErrors: { currency: expect.stringContaining("can't change") },
+    });
+    // Renaming (sending the same currency back) is still fine.
+    await expect(updateGroup(b.id, g.id, { name: "Big trip", currency: "EUR" })).resolves.toMatchObject({ name: "Big trip", currency: "EUR" });
+  });
+
+  it("won't delete a group while anyone has an unsettled balance", async () => {
+    const [a, b] = await Promise.all([user("Ann"), user("Bo")]);
+    const g = await createGroup(a.id, { name: "Dinners" });
+    await addMemberByEmail(a.id, g.id, { email: b.email });
+    await createExpense(b.id, { groupId: g.id, description: "Pizza", amountCents: 2000, paidById: b.id, date: today, split: { method: "equal", entries: [{ userId: a.id }, { userId: b.id }] } });
+    expect((await getGroup(a.id, g.id)).settled).toBe(false);
+    await expect(deleteGroup(a.id, g.id)).rejects.toMatchObject({ code: "CONFLICT" });
+    await recordPayment(a.id, { groupId: g.id, fromUserId: a.id, toUserId: b.id, amountCents: 1000 });
+    expect((await getGroup(a.id, g.id)).settled).toBe(true);
+    await deleteGroup(a.id, g.id);
+    await expect(getGroup(a.id, g.id)).rejects.toMatchObject({ code: "NOT_FOUND" });
+  });
+
+  it("the friend page shows only what a group expense moves between the two of you", async () => {
+    const [me, ben, chloe] = await Promise.all([user("Me"), user("Ben"), user("Chloe")]);
+    const g = await createGroup(me.id, { name: "Dinner club" });
+    await addMemberByEmail(me.id, g.id, { email: ben.email });
+    await addMemberByEmail(me.id, g.id, { email: chloe.email });
+    await createExpense(me.id, {
+      groupId: g.id, description: "Dinner", amountCents: 9000, paidById: me.id, date: today,
+      split: { method: "equal", entries: [{ userId: me.id }, { userId: ben.id }, { userId: chloe.id }] },
+    });
+    const withBen = await getFriend(me.id, ben.id);
+    expect(withBen.expenses.find((e) => e.description === "Dinner")?.myStakeCents).toBe(3000);
+    const benSide = await getFriend(ben.id, me.id);
+    expect(benSide.expenses.find((e) => e.description === "Dinner")?.myStakeCents).toBe(-3000);
   });
 });

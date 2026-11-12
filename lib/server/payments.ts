@@ -29,8 +29,12 @@ export async function recordPayment(userId: string, input: unknown) {
       throw new AppError("A payment with a friend must be between you and them.", "VALIDATION");
     }
     if (!(await areFriends(userId, friendId))) throw notFound("friend");
-    const me = await db.user.findUniqueOrThrow({ where: { id: userId }, select: { defaultCurrency: true } });
-    currency = me.defaultCurrency;
+    if (data.currency) {
+      currency = data.currency;
+    } else {
+      const me = await db.user.findUniqueOrThrow({ where: { id: userId }, select: { defaultCurrency: true } });
+      currency = me.defaultCurrency;
+    }
   }
 
   return db.settlement.create({

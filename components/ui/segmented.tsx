@@ -22,13 +22,13 @@ export function Segmented<T extends string>({
       value={value}
       onValueChange={(v) => v && onValueChange(v as T)}
       aria-label={label}
-      className={cn("grid auto-cols-fr grid-flow-col rounded-[10px] border border-rule bg-paper p-1", className)}
+      className={cn("grid auto-cols-fr grid-flow-col rounded-[10px] border border-field bg-paper p-1", className)}
     >
       {options.map((o) => (
         <ToggleGroup.Item
           key={o.value}
           value={o.value}
-          className="h-9 rounded-[7px] px-2 text-body-sm font-semibold text-ink-muted data-[state=on]:bg-surface data-[state=on]:text-ink data-[state=on]:shadow-[0_1px_2px_rgb(19_33_63/0.12)]"
+          className="h-11 rounded-[7px] px-2 text-body-sm font-semibold text-ink-muted data-[state=on]:bg-surface data-[state=on]:text-ink data-[state=on]:ring-2 data-[state=on]:ring-inset data-[state=on]:ring-ink"
         >
           {o.label}
         </ToggleGroup.Item>

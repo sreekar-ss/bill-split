@@ -59,3 +59,13 @@ describe("computeShares", () => {
     expect(computeShares(100, "shares", [{ userId: "a", value: 0 }]).ok).toBe(false);
   });
 });
+
+describe("share weight bounds", () => {
+  it("rejects weights that would overflow instead of producing NaN cents", () => {
+    const r = computeShares(10000, "shares", [{ userId: "a", value: 1e308 }, { userId: "b", value: 1e308 }, { userId: "c", value: 1 }]);
+    expect(r.ok).toBe(false);
+    expect(computeShares(10000, "shares", [{ userId: "a", value: 1001 }, { userId: "b", value: 1 }]).ok).toBe(false);
+    const ok = computeShares(10000, "shares", [{ userId: "a", value: 1000 }, { userId: "b", value: 1000 }]);
+    expect(ok).toEqual({ ok: true, shares: [{ userId: "a", amountCents: 5000 }, { userId: "b", amountCents: 5000 }] });
+  });
+});

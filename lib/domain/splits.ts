@@ -1,6 +1,9 @@
 import type { Cents } from "./money";
 
 export const SPLIT_METHODS = ["equal", "exact", "percentage", "shares"] as const;
+
+/** The largest weight one person can have in a shares split. */
+export const MAX_SHARE_WEIGHT = 1000;
 export type SplitMethod = (typeof SPLIT_METHODS)[number];
 
 /**
@@ -96,6 +99,10 @@ export function computeShares(totalCents: Cents, method: SplitMethod, entries: S
       const values = entries.map((e) => e.value ?? 0);
       if (values.some((v) => !Number.isFinite(v) || v < 0)) {
         return { ok: false, error: "Shares must be zero or more." };
+      }
+      // Keeps the weighted maths exact (huge weights overflow to Infinity/NaN cents).
+      if (values.some((v) => v > MAX_SHARE_WEIGHT)) {
+        return { ok: false, error: `Use shares of ${MAX_SHARE_WEIGHT.toLocaleString("en-US")} or less.` };
       }
       if (values.reduce((a, b) => a + b, 0) <= 0) {
         return { ok: false, error: "Give at least one person a share." };

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { computeNets, relationsFor, simplifyDebts, stakeInExpense, type LedgerExpense } from "@/lib/domain/ledger";
+import { computeNets, pairStakeInExpense, relationsFor, simplifyDebts, stakeInExpense, type LedgerExpense } from "@/lib/domain/ledger";
 
 const exp = (paidById: string, amountCents: number, shares: Record<string, number>): LedgerExpense => ({
   paidById, amountCents, shares: Object.entries(shares).map(([userId, a]) => ({ userId, amountCents: a })),
@@ -97,5 +97,28 @@ describe("relationsFor / stakeInExpense", () => {
     expect(stakeInExpense("ana", e)).toBe(6000);
     expect(stakeInExpense("ben", e)).toBe(-6000);
     expect(stakeInExpense("zed", e)).toBe(0);
+  });
+});
+
+describe("pairStakeInExpense", () => {
+  // Ana pays $90, split equally between Ana, Ben and Chloe.
+  const e: LedgerExpense = {
+    paidById: "ana",
+    amountCents: 9000,
+    shares: [
+      { userId: "ana", amountCents: 3000 },
+      { userId: "ben", amountCents: 3000 },
+      { userId: "chloe", amountCents: 3000 },
+    ],
+  };
+  it("counts only the part of a group expense between the two people", () => {
+    expect(pairStakeInExpense("ana", "ben", e, true)).toBe(3000);
+    expect(pairStakeInExpense("ben", "ana", e, true)).toBe(-3000);
+    expect(pairStakeInExpense("ben", "chloe", e, true)).toBe(0);
+  });
+  it("treats a direct expense as wholly between the pair", () => {
+    const direct: LedgerExpense = { paidById: "ana", amountCents: 5000, shares: [{ userId: "ana", amountCents: 0 }, { userId: "ben", amountCents: 5000 }] };
+    expect(pairStakeInExpense("ana", "ben", direct, false)).toBe(5000);
+    expect(pairStakeInExpense("ben", "ana", direct, false)).toBe(-5000);
   });
 });

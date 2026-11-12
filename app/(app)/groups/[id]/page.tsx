@@ -1,4 +1,112 @@
-export default async function Page({ params }: { params: Promise<{ id: string }> }) {
+import { ChevronLeft } from "lucide-react";
+import type { Metadata } from "next";
+import Link from "next/link";
+import { cache } from "react";
+import { listNames, memberCount } from "@/components/groups/format";
+import { GroupHeaderActions } from "@/components/groups/group-header-actions";
+import { GroupLedger } from "@/components/groups/group-ledger";
+import { SettlePlan } from "@/components/groups/settle-plan";
+import { BalanceBeam, type BeamRow } from "@/components/ui/balance-beam";
+import { PageHeader, Section } from "@/components/ui/page";
+import { requireUser } from "@/lib/auth/session";
+import { formatMoney } from "@/lib/domain/money";
+import { getGroup } from "@/lib/server/groups";
+import { orNotFound } from "@/lib/server/page";
+
+type Props = { params: Promise<{ id: string }> };
+
+// One query per request, shared by generateMetadata and the page.
+const loadGroup = cache(async (id: string) => {
+  const user = await requireUser();
+  const group = await orNotFound(getGroup(user.id, id));
+  return { user, group };
+});
+
+export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { id } = await params;
-  return <h1 className="text-heading font-bold">TODO: groups/[id] {id}</h1>;
+  const { group } = await loadGroup(id);
+  return { title: group.name };
+}
+
+export default async function GroupPage({ params }: Props) {
+  const { id } = await params;
+  const { user, group } = await loadGroup(id);
+  const meId = user.id;
+  const solo = group.members.length < 2;
+
+  const totalSpent = group.expenses.reduce((sum, e) => sum + e.amountCents, 0);
+  const spent = `${formatMoney(totalSpent, group.currency)} spent`;
+  const people = group.members.map((m) => ({ id: m.id, name: m.name }));
+  // Viewer first, so the subtitle reads "You, Ben and Chloe".
+  const names = [...group.members].sort((a, b) => Number(b.id === meId) - Number(a.id === meId)).map((m) => (m.id === meId ? "You" : m.name));
+
+  const beam: BeamRow[] = group.members.map((m) =>
+    m.id === meId
+      ? { id: m.id, name: "You", cents: m.netCents, phrase: { positive: "get back", negative: "owe" } }
+      : { id: m.id, name: m.name, cents: m.netCents },
+  );
+
+  return (
+    <div className="lg:grid lg:grid-cols-[minmax(0,1fr)_320px] lg:grid-rows-[auto_1fr] lg:gap-x-10">
+      <div className="min-w-0 lg:col-start-1 lg:row-start-1 lg:max-w-[720px]">
+        <PageHeader
+          back={
+            <Link
+              href="/groups"
+              className="-ml-2.5 mb-1 inline-flex min-h-11 items-center gap-0.5 rounded-[10px] pl-0.5 pr-2 text-body-sm font-medium hover:bg-ink/5"
+            >
+              <ChevronLeft className="size-[22px]" aria-hidden />
+              Groups
+            </Link>
+          }
+          title={group.name}
+          subtitle={
+            <>
+              <span className="block">{memberCount(group.members.length)}</span>
+              {group.members.length > 1 ? <span className="block truncate">{listNames(names)}</span> : null}
+            </>
+          }
+          actions={
+            <GroupHeaderActions
+              meId={meId}
+              group={{
+                id: group.id,
+                name: group.name,
+                currency: group.currency,
+                isAdmin: group.isAdmin,
+                currencyLocked: group.currencyLocked,
+                settled: group.settled,
+                members: group.members,
+              }}
+            />
+          }
+        />
+      </div>
+
+      <aside
+        aria-label="Balances and settle up"
+        className="min-w-0 lg:col-start-2 lg:row-span-2 lg:row-start-1 lg:self-start lg:border-l lg:border-rule lg:pl-8"
+      >
+        <Section title="Balances" action={totalSpent === 0 ? undefined : <span className="num text-body-sm text-ink-muted lg:hidden">{spent}</span>}>
+          {solo ? (
+            <p className="text-body-sm text-ink-muted">Add a member to start splitting costs.</p>
+          ) : (
+            <BalanceBeam rows={beam} currency={group.currency} label="Members' balances" />
+          )}
+        </Section>
+        {/* A group of one has nobody to settle with. */}
+        {solo ? null : (
+          <Section title="Settle up">
+            <SettlePlan groupId={group.id} plan={group.plan} people={people} meId={meId} currency={group.currency} />
+          </Section>
+        )}
+      </aside>
+
+      <div className="mt-8 min-w-0 lg:col-start-1 lg:row-start-2 lg:mt-6 lg:max-w-[720px]">
+        <Section title="Expenses" action={totalSpent === 0 ? undefined : <span className="num hidden text-body-sm text-ink-muted lg:inline">{spent} in total</span>}>
+          <GroupLedger group={group} meId={meId} />
+        </Section>
+      </div>
+    </div>
+  );
 }

@@ -126,7 +126,7 @@ export async function changePassword(userId: string, input: unknown) {
     await tx.passwordResetToken.updateMany({ where: { userId, usedAt: null }, data: { usedAt: new Date() } });
     return tx.user.update({
       where: { id: userId },
-      data: { password: newHash, sessionVersion: { increment: 1 } },
+      data: { password: newHash, sessionVersion: { increment: 1 }, pushSubscriptions: { deleteMany: {} } },
       select: { id: true, sessionVersion: true },
     });
   });

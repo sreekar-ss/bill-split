@@ -6,8 +6,9 @@ import { SESSION_COOKIE, sessionCookieOptions, shouldRefreshSession, signSession
  * actions still call requireUser(), which also validates the user's sessionVersion.
  *
  * Rolling sessions: a valid session over a day old is re-signed (same user and version) with a
- * fresh 30-day expiry, so people who use the app at least monthly stay logged in. A stale version
- * stays stale — logout-everywhere and password changes still end it.
+ * fresh 30-day expiry, so people who use the app at least monthly stay logged in — up to 180 days
+ * after they actually signed in (then they sign in again). A stale version stays stale —
+ * logout-everywhere and password changes still end it.
  */
 const APP_PREFIXES = ["/home", "/groups", "/friends", "/activity", "/account", "/expenses"];
 const AUTH_PAGES = ["/login", "/register", "/forgot-password"];
@@ -26,7 +27,7 @@ export async function proxy(request: NextRequest) {
       ? NextResponse.redirect(new URL("/home", request.url))
       : NextResponse.next();
   if (session && shouldRefreshSession(session)) {
-    response.cookies.set(SESSION_COOKIE, await signSessionToken({ userId: session.userId, v: session.v }), sessionCookieOptions());
+    response.cookies.set(SESSION_COOKIE, await signSessionToken({ userId: session.userId, v: session.v, authTime: session.authTime }), sessionCookieOptions());
   }
   return response;
 }

@@ -2,6 +2,7 @@ import { timingSafeEqual } from "node:crypto";
 import { NextResponse, type NextRequest } from "next/server";
 import { toDateInput } from "@/lib/domain/dates";
 import { sendWeeklyDigests } from "@/lib/server/notifications";
+import { purgeExpiredRecords } from "@/lib/server/housekeeping";
 import { runDueRecurring } from "@/lib/server/recurring";
 
 export const dynamic = "force-dynamic";
@@ -10,7 +11,8 @@ export const maxDuration = 300;
 /**
  * Daily job (Vercel Cron, see vercel.json). Vercel sends `Authorization: Bearer $CRON_SECRET`.
  * - creates due recurring expenses (idempotent);
- * - on Mondays (UTC), sends weekly digests to people who opted in (idempotent per week).
+ * - on Mondays (UTC), sends weekly digests to people who opted in (idempotent per week);
+ * - deletes throttling records (which hold IPs/emails) and used/expired emailed links.
  */
 export async function GET(request: NextRequest) {
   const secret = process.env.CRON_SECRET?.trim();
@@ -24,5 +26,6 @@ export async function GET(request: NextRequest) {
   const now = new Date();
   const recurring = await runDueRecurring(toDateInput(now));
   const digest = now.getUTCDay() === 1 ? await sendWeeklyDigests(now) : null;
-  return NextResponse.json({ ok: true, date: toDateInput(now), recurring, digest });
+  const housekeeping = await purgeExpiredRecords(now);
+  return NextResponse.json({ ok: true, date: toDateInput(now), recurring, digest, housekeeping });
 }

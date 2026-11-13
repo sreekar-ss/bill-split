@@ -5,6 +5,7 @@ import { db } from "./db";
 import { AppError } from "./errors";
 import { computeRelations } from "./ledger";
 import { parse } from "./parse";
+import { removeAllPushSubscriptions } from "./push";
 
 export async function updatePaymentHandles(userId: string, input: unknown) {
   const data = parse(paymentHandlesSchema, input);
@@ -22,7 +23,10 @@ export async function updatePaymentHandles(userId: string, input: unknown) {
 
 /** Signs out every session, including the current one. */
 export async function logoutEverywhere(userId: string) {
-  await db.user.update({ where: { id: userId }, data: { sessionVersion: { increment: 1 } } });
+  await db.$transaction(async (tx) => {
+    await tx.user.update({ where: { id: userId }, data: { sessionVersion: { increment: 1 } } });
+    await removeAllPushSubscriptions(userId, tx);
+  });
 }
 
 /**
@@ -30,10 +34,13 @@ export async function logoutEverywhere(userId: string) {
  * part of, friends). Other people appear by name only.
  */
 export async function exportAccountData(userId: string) {
-  const [profile, memberships, expenses, payments, friendships] = await Promise.all([
+  const [profile, memberships, expenses, payments, friendships, recurring, devices] = await Promise.all([
     db.user.findUniqueOrThrow({
       where: { id: userId },
-      select: { name: true, email: true, defaultCurrency: true, emailVerified: true, createdAt: true, venmoHandle: true, paypalMe: true, cashTag: true, upiId: true },
+      select: {
+        name: true, email: true, defaultCurrency: true, emailVerified: true, createdAt: true, venmoHandle: true, paypalMe: true, cashTag: true, upiId: true,
+        notifyExpenses: true, notifyPayments: true, notifyReminders: true, weeklyDigest: true,
+      },
     }),
     db.groupMember.findMany({ where: { userId }, select: { role: true, joinedAt: true, group: { select: { id: true, name: true, currency: true } } } }),
     db.expense.findMany({
@@ -55,6 +62,14 @@ export async function exportAccountData(userId: string) {
       where: { status: "accepted", OR: [{ userId }, { friendId: userId }] },
       select: { user: { select: { id: true, name: true } }, friend: { select: { id: true, name: true } }, createdAt: true },
     }),
+    db.recurringExpense.findMany({
+      where: { OR: [{ createdById: userId }, { paidById: userId }, { friendId: userId }] },
+      select: {
+        description: true, amountCents: true, currency: true, frequency: true, interval: true, anchorDay: true, nextRunOn: true, endsOn: true,
+        pausedAt: true, stoppedAt: true, createdAt: true, group: { select: { name: true } },
+      },
+    }),
+    db.pushSubscription.findMany({ where: { userId }, select: { userAgent: true, createdAt: true, lastSuccessAt: true } }),
   ]);
   return {
     exportedAt: new Date().toISOString(),
@@ -70,6 +85,8 @@ export async function exportAccountData(userId: string) {
     })),
     payments: payments.map((p) => ({ ...p, group: p.group?.name ?? null, from: p.fromUser.name, to: p.toUser.name, fromUser: undefined, toUser: undefined })),
     friends: friendships.map((f) => ({ name: f.user.id === userId ? f.friend.name : f.user.name, since: f.createdAt })),
+    recurringExpenses: recurring.map((r) => ({ ...r, group: r.group?.name ?? null })),
+    pushDevices: devices,
   };
 }
 
@@ -113,6 +130,7 @@ export async function deleteAccount(userId: string, input: unknown) {
     await tx.friendship.deleteMany({ where: { OR: [{ userId }, { friendId: userId }] } });
     await tx.passwordResetToken.deleteMany({ where: { userId } });
     await tx.emailToken.deleteMany({ where: { userId } });
+    await removeAllPushSubscriptions(userId, tx);
     await tx.user.update({
       where: { id: userId },
       data: {

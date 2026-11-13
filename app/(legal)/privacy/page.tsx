@@ -22,14 +22,16 @@ export default function PrivacyPage() {
         <li><strong>What you add:</strong> groups, members, expenses (descriptions, amounts, dates, categories, notes, how they&apos;re split), payments and recurring schedules. Other people in your groups can add these too.</li>
         <li><strong>People you invite:</strong> when you add someone by email who doesn&apos;t have an account, we store the name and email you give us and send them one invitation.</li>
         <li><strong>Payment details you choose to add:</strong> Venmo, PayPal.me, Cash App or UPI handles. We only use them to build payment links; BillSplit never moves money.</li>
-        <li><strong>Notification settings and devices:</strong> which emails you want and, if you turn on push notifications, a technical address for each device you enable.</li>
-        <li><strong>Security data:</strong> your IP address, used briefly to limit repeated sign-in and sign-up attempts, and standard server logs kept by our hosting provider.</li>
+        <li><strong>Notification settings and devices:</strong> which notifications you want and, if you turn on push notifications, a technical address for each device you enable plus its browser name (so you can tell devices apart).</li>
+        <li><strong>Security data:</strong> your IP address and email, used to limit repeated sign-in and sign-up attempts. These throttling records are deleted about a day after they expire. Our hosting provider also keeps standard server logs.</li>
       </ul>
 
       <h2>Cookies and local storage</h2>
       <p>
-        We use one essential cookie to keep you logged in. Your browser also remembers a few preferences on your device: your theme choice
-        and whether you dismissed the &ldquo;install the app&rdquo; prompt. There are no advertising or analytics cookies.
+        We use one essential cookie to keep you logged in, and a small preference cookie that remembers when you&apos;ve hidden the
+        &ldquo;confirm your email&rdquo; banner. Your browser also stores a few preferences on your device (local and session storage):
+        your theme, whether you dismissed the &ldquo;install the app&rdquo; prompt, and which reminders you just sent. There are no
+        advertising or analytics cookies.
       </p>
 
       <h2>How we use it</h2>
@@ -58,13 +60,14 @@ export default function PrivacyPage() {
       <h2>How long we keep it</h2>
       <p>
         We keep your data while your account exists. When you delete your account, we remove your name, email, password, payment handles,
-        devices and memberships. Expenses you shared with others stay in their history, shown as &ldquo;Deleted user&rdquo;, so their
-        balances still add up. Database backups made for safe updates are kept for a limited time and then deleted.
+        push devices, friendships and group memberships. Expenses you shared with others stay in their history, shown as &ldquo;Deleted user&rdquo;, so their
+        balances still add up. Used or expired emailed links (like password resets) are deleted after 30 days. Database
+        backups made for safe updates are kept for a limited time and then deleted.
       </p>
 
       <h2>Your choices and rights</h2>
       <ul>
-        <li><strong>Get a copy:</strong> Account → Your data → Download my data gives you everything as a file.</li>
+        <li><strong>Get a copy:</strong> Account → Your data → Download my data gives you a file with your profile, settings, groups, friends, the expenses, payments and recurring expenses you&apos;re part of, and your push devices.</li>
         <li><strong>Correct it:</strong> change your name, email preferences and payment details in Account.</li>
         <li><strong>Delete it:</strong> Account → Delete account (settle up first).</li>
         <li><strong>Stop emails:</strong> every notification email has an unsubscribe link, and Account has a switch for each kind.</li>

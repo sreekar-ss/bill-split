@@ -108,3 +108,61 @@ describe("delivery", () => {
     expect(left.map((s) => [s.endpoint.split("/").at(-1), s.failures])).toEqual([["flaky", 1]]);
   });
 });
+
+describe("security review fixes", () => {
+  it("a device can't be taken over with a known endpoint but different keys", async () => {
+    const [a, mallory] = await Promise.all([user("Ada"), user("Mal")]);
+    const ep = `https://push.test/victim-${n}`;
+    await savePushSubscription(a.id, sub(ep));
+    await expect(savePushSubscription(mallory.id, { endpoint: ep, keys: { p256dh: "C".repeat(87), auth: "D".repeat(22) } })).rejects.toMatchObject({ code: "CONFLICT" });
+    expect((await db.pushSubscription.findUniqueOrThrow({ where: { endpoint: ep } })).userId).toBe(a.id);
+  });
+
+  it("logging out everywhere, changing the password or deleting the account cuts devices off", async () => {
+    const { logoutEverywhere, deleteAccount } = await import("@/lib/server/account");
+    const { changePassword } = await import("@/lib/server/users");
+    const u = await user("Cut");
+    const save = (tag: string) => savePushSubscription(u.id, sub(`https://push.test/${tag}-${n}`));
+
+    await save("a");
+    await logoutEverywhere(u.id);
+    expect(await hasPushDevices(u.id)).toBe(false);
+
+    await save("b");
+    await changePassword(u.id, { currentPassword: "password123", newPassword: "password456" });
+    expect(await hasPushDevices(u.id)).toBe(false);
+
+    await save("c");
+    await deleteAccount(u.id, { password: "password456" });
+    expect(await db.pushSubscription.count({ where: { userId: u.id } })).toBe(0);
+  });
+
+  it("devices registered under an older session version get nothing and are removed", async () => {
+    const u = await user("Old");
+    await savePushSubscription(u.id, sub(`https://push.test/old-${n}`));
+    await db.user.update({ where: { id: u.id }, data: { sessionVersion: { increment: 1 } } }); // e.g. revoked elsewhere
+    await expect(sendPushToUser(u.id, { title: "t", body: "b", url: "/home" })).resolves.toBe(0);
+    expect(sentPushes).toHaveLength(0);
+    expect(await hasPushDevices(u.id)).toBe(false);
+  });
+
+  it("daily housekeeping deletes stale throttling records and old emailed links; export covers recurring and devices", async () => {
+    const { purgeExpiredRecords } = await import("@/lib/server/housekeeping");
+    const { exportAccountData } = await import("@/lib/server/account");
+    const u = await user("Hk");
+    const old = new Date(Date.now() - 2 * 86400000);
+    await db.rateLimit.create({ data: { key: `login:ip:203.0.113.9:${n}`, count: 3, resetAt: old } });
+    await db.rateLimit.create({ data: { key: `login:ip:203.0.113.10:${n}`, count: 1, resetAt: new Date(Date.now() + 60000) } });
+    await db.emailToken.create({ data: { userId: u.id, purpose: "verify_email", tokenHash: `old-${n}`, expiresAt: new Date(Date.now() - 40 * 86400000) } });
+    await purgeExpiredRecords();
+    expect(await db.rateLimit.count({ where: { key: `login:ip:203.0.113.9:${n}` } })).toBe(0);
+    expect(await db.rateLimit.count({ where: { key: `login:ip:203.0.113.10:${n}` } })).toBe(1);
+    expect(await db.emailToken.count({ where: { tokenHash: `old-${n}` } })).toBe(0);
+
+    await savePushSubscription(u.id, sub(`https://push.test/exp-${n}`), "Mozilla/5.0 (iPhone)");
+    const data = await exportAccountData(u.id);
+    expect(data.pushDevices).toEqual([expect.objectContaining({ userAgent: "Mozilla/5.0 (iPhone)" })]);
+    expect(data).toHaveProperty("recurringExpenses");
+    expect(data.profile).toMatchObject({ notifyExpenses: true, weeklyDigest: false });
+  });
+});

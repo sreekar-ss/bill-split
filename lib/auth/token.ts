@@ -6,6 +6,8 @@ export const SESSION_COOKIE = "bs_session";
 export const SESSION_MAX_AGE_SECONDS = 60 * 60 * 24 * 30; // 30 days
 /** Rolling sessions: a session older than this is re-issued (with a fresh 30 days) on the next visit. */
 export const SESSION_REFRESH_AFTER_SECONDS = 60 * 60 * 24; // 1 day
+/** Rolling stops this long after the person actually signed in; they log in again ~30 days later. */
+export const SESSION_ABSOLUTE_MAX_SECONDS = 60 * 60 * 24 * 180; // 180 days
 
 /** One place for the cookie's attributes (startSession and the proxy's refresh both use it). */
 export function sessionCookieOptions() {
@@ -24,6 +26,8 @@ export interface SessionPayload {
   v: number;
   /** Seconds since epoch when this token was signed (set on verify). */
   issuedAt?: number;
+  /** Seconds since epoch when the person last actually signed in (kept across refreshes). */
+  authTime?: number;
 }
 
 function secretKey(): Uint8Array {
@@ -36,11 +40,13 @@ function secretKey(): Uint8Array {
 
 /** True when a still-valid session should be re-issued to keep it rolling. */
 export function shouldRefreshSession(session: SessionPayload, nowSeconds = Math.floor(Date.now() / 1000)): boolean {
+  const signedInAt = session.authTime ?? session.issuedAt;
+  if (signedInAt !== undefined && nowSeconds - signedInAt > SESSION_ABSOLUTE_MAX_SECONDS) return false;
   return session.issuedAt === undefined || nowSeconds - session.issuedAt > SESSION_REFRESH_AFTER_SECONDS;
 }
 
 export async function signSessionToken(payload: SessionPayload): Promise<string> {
-  return new SignJWT({ v: payload.v })
+  return new SignJWT({ v: payload.v, at: payload.authTime ?? Math.floor(Date.now() / 1000) })
     .setProtectedHeader({ alg: "HS256" })
     .setSubject(payload.userId)
     .setIssuedAt()
@@ -53,7 +59,8 @@ export async function verifySessionToken(token: string | undefined): Promise<Ses
   try {
     const { payload } = await jwtVerify(token, secretKey(), { algorithms: ["HS256"] });
     if (typeof payload.sub !== "string" || typeof payload.v !== "number") return null;
-    return { userId: payload.sub, v: payload.v, issuedAt: typeof payload.iat === "number" ? payload.iat : undefined };
+    const issuedAt = typeof payload.iat === "number" ? payload.iat : undefined;
+    return { userId: payload.sub, v: payload.v, issuedAt, authTime: typeof payload.at === "number" ? payload.at : issuedAt };
   } catch {
     return null;
   }

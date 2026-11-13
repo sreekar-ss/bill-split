@@ -99,6 +99,7 @@ export async function resetPassword(input: unknown) {
       data: {
         password: passwordHash,
         sessionVersion: { increment: 1 },
+        pushSubscriptions: { deleteMany: {} },
         emailVerified: true,
         status: "active",
         ...(unproven ? { venmoHandle: null, paypalMe: null, cashTag: null, upiId: null } : {}),

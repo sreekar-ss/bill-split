@@ -1,6 +1,6 @@
 import { ChevronLeft } from "lucide-react";
 import type { Metadata } from "next";
-import Link from "next/link";
+import { AppLink } from "@/components/ui/app-link";
 import { cache } from "react";
 import { AddExpenseButton } from "@/components/activity/add-expense-button";
 import { MonthlyFeed, sortByDate, type FeedItem } from "@/components/activity/feed";
@@ -53,13 +53,13 @@ export default async function FriendPage({ params }: Params) {
 
   return (
     <div className="max-w-[720px]">
-      <Link
+      <AppLink
         href="/friends"
         className="-ml-2 mb-2 inline-flex min-h-11 items-center gap-1 rounded-[10px] px-2 text-body-sm font-semibold text-ink-muted hover:text-ink"
       >
         <ChevronLeft className="size-[18px]" aria-hidden />
         Friends
-      </Link>
+      </AppLink>
 
       <header className="flex items-center gap-3.5">
         <Avatar id={friend.id} name={friend.name} size={56} />

@@ -1,4 +1,4 @@
-import Link from "next/link";
+import { AppLink } from "@/components/ui/app-link";
 import { formatDay } from "@/lib/domain/dates";
 import { formatMoney, type Cents } from "@/lib/domain/money";
 import { cn } from "@/lib/utils/cn";
@@ -47,7 +47,12 @@ export function LedgerRow({
     </>
   );
   const cls = cn("flex min-h-16 w-full items-center gap-3 border-b border-rule py-2.5 text-left", (href || onClick) && "hover:bg-ink/[0.03]", className);
-  if (href) return <Link href={href} className={cls}>{inner}</Link>;
+  if (href)
+    return (
+      <AppLink href={href} prefetch={false} className={cls}>
+        {inner}
+      </AppLink>
+    );
   if (onClick) return <button type="button" onClick={onClick} className={cls}>{inner}</button>;
   return <div className={cls}>{inner}</div>;
 }

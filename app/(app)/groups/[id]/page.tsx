@@ -1,6 +1,6 @@
 import { ChartColumn, ChevronLeft } from "lucide-react";
 import type { Metadata } from "next";
-import Link from "next/link";
+import { AppLink } from "@/components/ui/app-link";
 import { cache } from "react";
 import { ArchivedBanner } from "@/components/groups/archive-controls";
 import { listNames, memberCount } from "@/components/groups/format";
@@ -70,13 +70,13 @@ export default async function GroupPage({ params }: Props) {
       <div className="min-w-0 lg:col-start-1 lg:row-start-1 lg:max-w-[720px]">
         <PageHeader
           back={
-            <Link
+            <AppLink
               href="/groups"
               className="-ml-2.5 mb-1 inline-flex min-h-11 items-center gap-0.5 rounded-[10px] pl-0.5 pr-2 text-body-sm font-medium hover:bg-ink/5"
             >
               <ChevronLeft className="size-[22px]" aria-hidden />
               Groups
-            </Link>
+            </AppLink>
           }
           title={
             group.icon ? (
@@ -113,13 +113,13 @@ export default async function GroupPage({ params }: Props) {
         />
         {group.archived ? <ArchivedBanner groupId={group.id} /> : null}
         {group.expenses.length > 0 ? (
-          <Link
+          <AppLink
             href={`/groups/${group.id}/insights`}
             className={buttonVariants({ variant: "ghost", className: group.archived ? "-ml-4 mb-3" : "-ml-4 -mt-2 mb-3" })}
           >
             <ChartColumn aria-hidden />
             Spending
-          </Link>
+          </AppLink>
         ) : null}
       </div>
 

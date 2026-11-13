@@ -1,4 +1,4 @@
-import Link from "next/link";
+import { AppLink } from "@/components/ui/app-link";
 import { formatMoney, type Cents } from "@/lib/domain/money";
 import { cn } from "@/lib/utils/cn";
 
@@ -81,8 +81,8 @@ export function BalanceBeam({
 function RowShell({ href, children }: { href?: string; children: React.ReactNode }) {
   if (!href) return <div className="block rounded-[6px]">{children}</div>;
   return (
-    <Link href={href} className="-mx-1 block rounded-[6px] px-1 hover:bg-ink/[0.03]">
+    <AppLink href={href} prefetch={false} className="-mx-1 block rounded-[6px] px-1 hover:bg-ink/[0.03]">
       {children}
-    </Link>
+    </AppLink>
   );
 }

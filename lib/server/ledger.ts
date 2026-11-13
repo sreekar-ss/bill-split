@@ -1,4 +1,5 @@
 import "server-only";
+import { cache } from "react";
 import { computeNets, relationsFor, simplifyDebts, type LedgerExpense, type LedgerPayment, type Transfer } from "@/lib/domain/ledger";
 import type { Cents } from "@/lib/domain/money";
 import { db } from "./db";
@@ -59,24 +60,47 @@ export async function loadGroupLedger(groupId: string) {
   return { nets, plan: simplifyDebts(nets) };
 }
 
-/** Every person the user has a balance with, across all groups and direct expenses. */
-export async function computeRelations(userId: string): Promise<Map<string, Relation>> {
-  const [user, memberships, directExpenses, directPayments] = await Promise.all([
-    db.user.findUniqueOrThrow({ where: { id: userId }, select: { defaultCurrency: true } }),
-    db.groupMember.findMany({
-      where: { userId },
-      select: {
-        group: {
-          select: {
-            id: true,
-            name: true,
-            currency: true,
-            expenses: { select: ledgerExpenseSelect },
-            settlements: { select: { fromUserId: true, toUserId: true, amountCents: true } },
-          },
+/*
+ * Per-request memoisation (React cache): one page often needs the same data from several loaders
+ * (Home shows balances in the summary and on the friends list; Activity lists groups and friends).
+ * Each is read from the database once per request. Outside a server render (actions, cron, tests)
+ * cache() doesn't memoise, so a write is never followed by a stale read.
+ */
+
+/** The user's default currency. */
+export const getDefaultCurrency = cache(async (userId: string) => {
+  const user = await db.user.findUniqueOrThrow({ where: { id: userId }, select: { defaultCurrency: true } });
+  return user.defaultCurrency;
+});
+
+/** Every group the user is in, with what both the group list and the balances need. */
+export const loadMyGroups = cache((userId: string) =>
+  db.groupMember.findMany({
+    where: { userId },
+    select: {
+      group: {
+        select: {
+          id: true,
+          name: true,
+          currency: true,
+          icon: true,
+          archivedAt: true,
+          updatedAt: true,
+          _count: { select: { members: true } },
+          members: { select: { user: { select: { id: true, name: true, status: true } } }, orderBy: { joinedAt: "asc" }, take: 5 },
+          expenses: { select: { ...ledgerExpenseSelect, createdAt: true } },
+          settlements: { select: { fromUserId: true, toUserId: true, amountCents: true, createdAt: true } },
         },
       },
-    }),
+    },
+  }),
+);
+
+/** Every person the user has a balance with, across all groups and direct expenses. */
+export const computeRelations = cache(async (userId: string): Promise<Map<string, Relation>> => {
+  const [defaultCurrency, memberships, directExpenses, directPayments] = await Promise.all([
+    getDefaultCurrency(userId),
+    loadMyGroups(userId),
     db.expense.findMany({ where: { groupId: null, splits: { some: { userId } } }, select: { ...ledgerExpenseSelect, currency: true } }),
     db.settlement.findMany({
       where: { groupId: null, OR: [{ fromUserId: userId }, { toUserId: userId }] },
@@ -120,9 +144,9 @@ export async function computeRelations(userId: string): Promise<Map<string, Rela
     addRelations({ kind: "direct", currency: b.currency }, simplifyDebts(computeNets(b.expenses, b.payments)));
   }
 
-  for (const rel of relations.values()) rel.totals = tidyTotals(rel.totals, user.defaultCurrency);
+  for (const rel of relations.values()) rel.totals = tidyTotals(rel.totals, defaultCurrency);
   return relations;
-}
+});
 
 /**
  * Signed nets for the direct (non-group) context between two users, one per currency, non-zero

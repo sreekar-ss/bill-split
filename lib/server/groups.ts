@@ -7,7 +7,7 @@ import { sendClaimInvite } from "./email-tokens";
 import { ensureFriendship } from "./friends";
 import { HIDDEN_HANDLES, membersSharingHandles } from "./handle-sharing";
 import { findOrCreateInvitee } from "./invitees";
-import { loadGroupLedger } from "./ledger";
+import { loadGroupLedger, loadMyGroups } from "./ledger";
 import { parse } from "./parse";
 
 const userSummary = { id: true, name: true, email: true, status: true } as const;
@@ -32,25 +32,7 @@ export async function assertGroupAdmin(groupId: string, userId: string, message:
 }
 
 export async function listGroups(userId: string) {
-  const memberships = await db.groupMember.findMany({
-    where: { userId },
-    select: {
-      group: {
-        select: {
-          id: true,
-          name: true,
-          currency: true,
-          icon: true,
-          archivedAt: true,
-          updatedAt: true,
-          _count: { select: { members: true } },
-          members: { select: { user: { select: { id: true, name: true, status: true } } }, orderBy: { joinedAt: "asc" }, take: 5 },
-          expenses: { select: { paidById: true, amountCents: true, createdAt: true, splits: { select: { userId: true, amountCents: true } } } },
-          settlements: { select: { fromUserId: true, toUserId: true, amountCents: true, createdAt: true } },
-        },
-      },
-    },
-  });
+  const memberships = await loadMyGroups(userId);
 
   return memberships
     .map(({ group }) => {

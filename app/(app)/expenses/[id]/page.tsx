@@ -1,6 +1,6 @@
 import { ChevronLeft } from "lucide-react";
 import type { Metadata } from "next";
-import Link from "next/link";
+import { AppLink } from "@/components/ui/app-link";
 import { cache } from "react";
 import { CommentsSection } from "@/components/comments/comments-section";
 import { categoryLabel } from "@/components/expenses/categories";
@@ -80,13 +80,13 @@ export default async function ExpensePage({ params }: Props) {
 
   return (
     <div className="max-w-[720px]">
-      <Link
+      <AppLink
         href={ctx.href}
         className="-ml-2 mb-2 inline-flex min-h-11 items-center gap-1 rounded-[10px] pl-1 pr-3 text-body-sm font-medium text-ink-muted hover:bg-ink/5 hover:text-ink"
       >
         <ChevronLeft className="size-5" aria-hidden />
         {ctx.name}
-      </Link>
+      </AppLink>
 
       <header className="mb-5">
         <h1 className="text-heading font-bold [overflow-wrap:anywhere]">{e.description}</h1>
@@ -128,9 +128,9 @@ export default async function ExpensePage({ params }: Props) {
           <div className="min-w-0">
             <dt className="text-meta text-ink-muted">{ctx.label}</dt>
             <dd className="truncate font-medium">
-              <Link href={ctx.href} className="underline decoration-rule underline-offset-4 hover:decoration-ink">
+              <AppLink href={ctx.href} className="underline decoration-rule underline-offset-4 hover:decoration-ink">
                 {ctx.name}
-              </Link>
+              </AppLink>
             </dd>
           </div>
           <div className="min-w-0">
@@ -145,9 +145,9 @@ export default async function ExpensePage({ params }: Props) {
       {archived ? (
         <p className="mt-4 rounded-[10px] border border-rule px-3 py-2.5 text-body-sm text-ink-muted">
           This group is archived. Unarchive it on the{" "}
-          <Link href={ctx.href} className="font-medium text-ink underline decoration-rule underline-offset-4 hover:decoration-ink">
+          <AppLink href={ctx.href} className="font-medium text-ink underline decoration-rule underline-offset-4 hover:decoration-ink">
             group page
-          </Link>{" "}
+          </AppLink>{" "}
           to edit this expense.
         </p>
       ) : (

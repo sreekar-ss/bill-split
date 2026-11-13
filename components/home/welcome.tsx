@@ -1,5 +1,5 @@
 import { UserPlus, Users } from "lucide-react";
-import Link from "next/link";
+import { AppLink } from "@/components/ui/app-link";
 import { Button } from "@/components/ui/button";
 import { Panel } from "@/components/ui/page";
 
@@ -15,16 +15,16 @@ export function Welcome({ name }: { name: string }) {
       </p>
       <div className="mt-5 flex flex-col gap-2 sm:flex-row">
         <Button asChild>
-          <Link href="/groups">
+          <AppLink href="/groups">
             <Users aria-hidden />
             Create a group
-          </Link>
+          </AppLink>
         </Button>
         <Button asChild variant="secondary">
-          <Link href="/friends?add=1">
+          <AppLink href="/friends?add=1">
             <UserPlus aria-hidden />
             Add a friend
-          </Link>
+          </AppLink>
         </Button>
       </div>
     </Panel>

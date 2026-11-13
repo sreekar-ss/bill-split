@@ -44,24 +44,3 @@ export function EmptyState({ title, body, action }: { title: string; body: strin
 export function Skeleton({ className }: { className?: string }) {
   return <div className={cn("animate-pulse rounded-[8px] bg-ink/[0.07]", className)} />;
 }
-
-/** Generic page skeleton for loading.tsx files. */
-export function PageSkeleton({ rows = 6 }: { rows?: number }) {
-  return (
-    <div role="status" aria-busy="true">
-      <span className="sr-only">Loading…</span>
-      <Skeleton className="mb-6 h-8 w-40" />
-      <Skeleton className="mb-8 h-32 w-full rounded-[20px]" />
-      {Array.from({ length: rows }, (_, i) => (
-        <div key={i} className="flex items-center gap-3 border-b border-rule py-3">
-          <Skeleton className="size-10" />
-          <div className="flex-1 space-y-2">
-            <Skeleton className="h-4 w-1/2" />
-            <Skeleton className="h-3 w-1/3" />
-          </div>
-          <Skeleton className="h-8 w-20" />
-        </div>
-      ))}
-    </div>
-  );
-}

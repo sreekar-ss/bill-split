@@ -1,4 +1,4 @@
-import Link from "next/link";
+import { AppLink } from "@/components/ui/app-link";
 import { formatMoney, type Cents } from "@/lib/domain/money";
 import { percentOf } from "./format";
 
@@ -67,9 +67,9 @@ export function RankedBars({
         return (
           <li key={r.key}>
             {r.href ? (
-              <Link href={r.href} className="-mx-2 block min-h-11 rounded-[6px] px-2 py-2 hover:bg-ink/[0.03]">
+              <AppLink href={r.href} prefetch={false} className="-mx-2 block min-h-11 rounded-[6px] px-2 py-2 hover:bg-ink/[0.03]">
                 {body}
-              </Link>
+              </AppLink>
             ) : (
               <div className="block min-h-11 py-2">{body}</div>
             )}

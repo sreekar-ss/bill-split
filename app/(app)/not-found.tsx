@@ -1,4 +1,4 @@
-import Link from "next/link";
+import { AppLink } from "@/components/ui/app-link";
 import { Button } from "@/components/ui/button";
 
 /** 404 inside the app shell, e.g. a group you were removed from or a deleted expense. */
@@ -12,10 +12,10 @@ export default function AppNotFound() {
       </p>
       <div className="mt-6 flex flex-wrap gap-3">
         <Button asChild>
-          <Link href="/home">Go to home</Link>
+          <AppLink href="/home">Go to home</AppLink>
         </Button>
         <Button asChild variant="secondary">
-          <Link href="/groups">See your groups</Link>
+          <AppLink href="/groups">See your groups</AppLink>
         </Button>
       </div>
     </div>

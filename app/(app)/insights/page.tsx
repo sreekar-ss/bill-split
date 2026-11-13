@@ -1,6 +1,6 @@
 import { Users } from "lucide-react";
 import type { Metadata } from "next";
-import Link from "next/link";
+import { AppLink } from "@/components/ui/app-link";
 import { categoryLabel, currencyName } from "@/components/expenses/categories";
 import { BackLink } from "@/components/insights/back-link";
 import { insightsHref, parsePeriod, periodPhrase, first, PERIODS } from "@/components/insights/format";
@@ -70,10 +70,10 @@ export default async function InsightsPage({ searchParams }: Props) {
           body={`Once you share an expense with someone, your share shows up here by month, category and group. There's nothing in ${periodPhrase(months)}.`}
           action={
             <Button asChild variant="secondary">
-              <Link href="/groups">
+              <AppLink href="/groups">
                 <Users aria-hidden />
                 Go to your groups
-              </Link>
+              </AppLink>
             </Button>
           }
         />

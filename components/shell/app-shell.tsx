@@ -13,6 +13,7 @@ import { NotificationPrompt } from "@/components/pwa/notification-prompt";
 import { OfflineIndicator } from "@/components/pwa/offline-indicator";
 import { OfflineSyncProvider } from "@/components/pwa/offline-sync";
 import { AddExpenseContext, type AddExpensePreset } from "./add-expense-context";
+import { LinkPending, NavProgress } from "./nav-progress";
 
 const NAV = [
   { href: "/home", label: "Home", icon: House },
@@ -42,7 +43,16 @@ export function AppShell({ contexts, pushKey = null, children }: { contexts: Exp
     return undefined;
   }, [pathname, routeGroupId, contexts.groups]);
 
-  const isActive = (href: string) => pathname === href || pathname.startsWith(`${href}/`);
+  const isCurrent = (href: string) => pathname === href || pathname.startsWith(`${href}/`);
+  // The tapped tab lights up at once, while the current page stays on screen until the next one is ready.
+  // Forgotten as soon as the route changes, so Back never shows a stale highlight.
+  const [tapped, setTapped] = useState<string | null>(null);
+  const [tappedOn, setTappedOn] = useState(pathname);
+  if (tappedOn !== pathname) {
+    setTappedOn(pathname);
+    setTapped(null);
+  }
+  const isActive = (href: string) => (tapped ? href === tapped : isCurrent(href));
   const showAdd = canAddExpense && !onArchivedGroup;
   // While someone is typing in a page field (e.g. a comment), the floating pill would sit over it
   // and the keyboard: hide it until focus leaves the field. Fields inside sheets don't count.
@@ -65,6 +75,7 @@ export function AppShell({ contexts, pushKey = null, children }: { contexts: Exp
     <AddExpenseContext.Provider value={api}>
       <OfflineSyncProvider userId={contexts.me.id}>
       <InstallAppProvider engaged={canAddExpense}>
+      <NavProgress />
       <a href="#main" className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-50 focus:rounded-[10px] focus:bg-surface focus:px-3 focus:py-2">
         Skip to content
       </a>
@@ -89,7 +100,8 @@ export function AppShell({ contexts, pushKey = null, children }: { contexts: Exp
               <li key={href}>
                 <Link
                   href={href}
-                  aria-current={isActive(href) ? "page" : undefined}
+                  onNavigate={() => setTapped(href)}
+                  aria-current={isCurrent(href) ? "page" : undefined}
                   className={cn(
                     "flex h-11 items-center gap-3 rounded-[10px] px-3 text-ink-muted hover:bg-ink/5 hover:text-ink",
                     isActive(href) && "bg-ink/[0.06] font-semibold text-ink",
@@ -97,6 +109,7 @@ export function AppShell({ contexts, pushKey = null, children }: { contexts: Exp
                 >
                   <Icon className="size-5" aria-hidden />
                   {label}
+                  <LinkPending />
                 </Link>
               </li>
             ))}
@@ -133,7 +146,8 @@ export function AppShell({ contexts, pushKey = null, children }: { contexts: Exp
               <li key={href}>
                 <Link
                   href={href}
-                  aria-current={active ? "page" : undefined}
+                  onNavigate={() => setTapped(href)}
+                  aria-current={isCurrent(href) ? "page" : undefined}
                   className={cn(
                     "relative flex h-full flex-col items-center justify-center gap-0.5 text-meta text-ink-muted",
                     active && "font-semibold text-ink before:absolute before:inset-x-5 before:top-0 before:h-[3px] before:rounded-b before:bg-ink",
@@ -141,6 +155,7 @@ export function AppShell({ contexts, pushKey = null, children }: { contexts: Exp
                 >
                   <Icon className="size-[22px]" aria-hidden />
                   {label}
+                  <LinkPending />
                 </Link>
               </li>
             );

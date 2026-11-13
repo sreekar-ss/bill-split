@@ -1,6 +1,6 @@
 import { Download } from "lucide-react";
 import type { Metadata } from "next";
-import Link from "next/link";
+import { AppLink } from "@/components/ui/app-link";
 import { DeleteAccountButton } from "@/components/account/delete-account";
 import { EmailStatus } from "@/components/account/email-status";
 import { LogoutButton } from "@/components/account/logout-button";
@@ -112,8 +112,8 @@ export default async function AccountPage() {
             Download my data
           </a>
           <p className="mt-3 text-body-sm text-ink-muted">
-            Read the <Link href="/privacy" className="font-semibold text-ink underline underline-offset-4">privacy policy</Link> and{" "}
-            <Link href="/terms" className="font-semibold text-ink underline underline-offset-4">terms of use</Link>.
+            Read the <AppLink href="/privacy" className="font-semibold text-ink underline underline-offset-4">privacy policy</AppLink> and{" "}
+            <AppLink href="/terms" className="font-semibold text-ink underline underline-offset-4">terms of use</AppLink>.
           </p>
         </Section>
 

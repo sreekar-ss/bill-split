@@ -2,7 +2,7 @@ import "server-only";
 import { stakeInExpense } from "@/lib/domain/ledger";
 import type { Cents } from "@/lib/domain/money";
 import { db } from "./db";
-import { computeRelations } from "./ledger";
+import { computeRelations, getDefaultCurrency } from "./ledger";
 import { listGroups } from "./groups";
 
 const userSummary = { id: true, name: true, status: true } as const;
@@ -111,11 +111,11 @@ export async function listActivity(userId: string, limit = 50): Promise<Activity
 }
 
 export async function getDashboard(userId: string) {
-  const [relations, groups, recent, user] = await Promise.all([
+  const [relations, groups, recent, defaultCurrency] = await Promise.all([
     computeRelations(userId),
     listGroups(userId),
     listActivity(userId, 6),
-    db.user.findUniqueOrThrow({ where: { id: userId }, select: { defaultCurrency: true } }),
+    getDefaultCurrency(userId),
   ]);
   const ids = [...relations.keys()];
   const users = await db.user.findMany({ where: { id: { in: ids } }, select: { id: true, name: true, email: true, status: true } });
@@ -141,13 +141,13 @@ export async function getDashboard(userId: string) {
     .map((t) => ({ ...t, netCents: t.owedToMeCents - t.iOweCents }))
     .sort(
       (a, b) =>
-        Number(b.currency === user.defaultCurrency) - Number(a.currency === user.defaultCurrency) ||
+        Number(b.currency === defaultCurrency) - Number(a.currency === defaultCurrency) ||
         b.owedToMeCents + b.iOweCents - (a.owedToMeCents + a.iOweCents),
     );
 
   return {
     /** The user's default currency (used when there's nothing owed at all). */
-    currency: user.defaultCurrency,
+    currency: defaultCurrency,
     /** One summary per currency with a non-zero balance; empty when everything is settled. */
     totals,
     people,

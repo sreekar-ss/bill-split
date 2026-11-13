@@ -1,7 +1,7 @@
 "use client";
 
 import { Trash2 } from "lucide-react";
-import Link from "next/link";
+import { AppLink } from "@/components/ui/app-link";
 import { useEffect, useId, useOptimistic, useRef, useState, useTransition } from "react";
 import { toast } from "sonner";
 import { addCommentAction, deleteCommentAction } from "@/app/actions/comments";
@@ -157,9 +157,9 @@ export function CommentThread({
           {groupHref ? (
             <>
               Unarchive it on the{" "}
-              <Link href={groupHref} className="font-medium text-ink underline decoration-rule underline-offset-4 hover:decoration-ink">
+              <AppLink href={groupHref} className="font-medium text-ink underline decoration-rule underline-offset-4 hover:decoration-ink">
                 group page
-              </Link>{" "}
+              </AppLink>{" "}
               to add comments.
             </>
           ) : (

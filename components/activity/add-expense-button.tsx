@@ -1,7 +1,7 @@
 "use client";
 
 import { Plus } from "lucide-react";
-import Link from "next/link";
+import { AppLink } from "@/components/ui/app-link";
 import { useAddExpense, type AddExpensePreset } from "@/components/shell/add-expense-context";
 import { Button, type ButtonProps } from "@/components/ui/button";
 
@@ -22,7 +22,7 @@ export function AddExpenseButton({
   if (!canAddExpense) {
     return (
       <Button asChild variant={variant} className={className}>
-        <Link href="/groups">Create a group</Link>
+        <AppLink href="/groups">Create a group</AppLink>
       </Button>
     );
   }

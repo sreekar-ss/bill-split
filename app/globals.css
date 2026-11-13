@@ -163,6 +163,18 @@
 @utility animate-fade {
   animation: fade-in 150ms ease-out both;
 }
+/* The page-loading bar: a short segment sliding across the top of the screen. */
+@keyframes nav-progress {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(300%);
+  }
+}
+@utility animate-nav-progress {
+  animation: nav-progress 900ms ease-in-out infinite;
+}
 
 /*
  * iPhone Safari gives date fields a minimum width that ignores width: 100%, so in a two-column

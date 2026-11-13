@@ -1,7 +1,7 @@
 "use client";
 
 import { RotateCw } from "lucide-react";
-import Link from "next/link";
+import { AppLink } from "@/components/ui/app-link";
 import { useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 
@@ -30,7 +30,7 @@ export default function AppError({ error, retry }: { error: unknown; retry: () =
           Try again
         </Button>
         <Button asChild variant="secondary">
-          <Link href="/home">Go to home</Link>
+          <AppLink href="/home">Go to home</AppLink>
         </Button>
       </div>
       {digest ? <p className="mt-6 text-meta text-ink-muted">Error reference: <span className="num">{digest}</span></p> : null}

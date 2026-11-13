@@ -42,7 +42,7 @@ lib/auth/*             session cookie, password hashing, getCurrentUser
 5. **Balances**: per group (each member's net) and the **simplified "who pays whom" plan**. On the dashboard: total you owe, total you're owed, and a per-person net.
 6. **Settle up**: record a payment between two people in a group or between friends. The amount is prefilled from the suggestion and partial payments are allowed. A payment can be deleted.
 7. **Activity**: a recent feed of expenses and payments across everything the user can see.
-8. **Quality floor**: mobile bottom nav and desktop rail, light and dark themes, empty states, loading skeletons, toasts, keyboard focus, and WCAG AA contrast.
+8. **Quality floor**: mobile bottom nav and desktop rail, light and dark themes, empty states, loading feedback, toasts, keyboard focus, and WCAG AA contrast.
 
 ### Email configuration
 Password-reset emails go through [Resend](https://resend.com). Settings:

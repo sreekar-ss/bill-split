@@ -1,4 +1,4 @@
-import Link from "next/link";
+import { AppLink } from "@/components/ui/app-link";
 import { cn } from "@/lib/utils/cn";
 
 /**
@@ -17,7 +17,7 @@ export function LinkToggle({
   return (
     <div role="group" aria-label={label} className={cn("inline-grid auto-cols-fr grid-flow-col rounded-[10px] border border-field bg-paper p-1", className)}>
       {options.map((o) => (
-        <Link
+        <AppLink
           key={o.href}
           href={o.href}
           scroll={false}
@@ -36,7 +36,7 @@ export function LinkToggle({
           ) : (
             o.label
           )}
-        </Link>
+        </AppLink>
       ))}
     </div>
   );

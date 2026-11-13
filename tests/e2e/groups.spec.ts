@@ -137,7 +137,7 @@ test.describe("groups", () => {
     await outsider.close();
 
     await register(page, makeUser(info, "Ana"));
-    // Pages stream behind loading.tsx, so the HTTP status is already sent; the not-found UI is the 404.
+    // The not-found UI is what tells us it is a 404.
     await page.goto(url);
     await expectNotFound(page);
     await expect(page.getByText("Private group")).toHaveCount(0);

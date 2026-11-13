@@ -9,6 +9,7 @@ import type { ExpenseDetail } from "@/lib/server/expenses";
 import type { ExpenseContexts } from "@/lib/server/groups";
 import { cn } from "@/lib/utils/cn";
 import { InstallAppProvider } from "@/components/pwa/install-app";
+import { NotificationPrompt } from "@/components/pwa/notification-prompt";
 import { AddExpenseContext, type AddExpensePreset } from "./add-expense-context";
 
 const NAV = [
@@ -19,7 +20,7 @@ const NAV = [
   { href: "/account", label: "Account", icon: CircleUserRound },
 ] as const;
 
-export function AppShell({ contexts, children }: { contexts: ExpenseContexts; children: React.ReactNode }) {
+export function AppShell({ contexts, pushKey = null, children }: { contexts: ExpenseContexts; pushKey?: string | null; children: React.ReactNode }) {
   const pathname = usePathname();
   const [sheet, setSheet] = useState<{ open: boolean; preset?: AddExpensePreset; editing?: ExpenseDetail }>({ open: false });
   const canAddExpense = contexts.groups.length > 0 || contexts.friends.length > 0;
@@ -132,6 +133,7 @@ export function AppShell({ contexts, children }: { contexts: ExpenseContexts; ch
         preset={sheet.preset}
         editing={sheet.editing}
       />
+        <NotificationPrompt publicKey={pushKey} engaged={canAddExpense} />
       </InstallAppProvider>
     </AddExpenseContext.Provider>
   );

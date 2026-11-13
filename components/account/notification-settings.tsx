@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, CircleAlert } from "lucide-react";
+import { Check } from "lucide-react";
 import { Switch } from "radix-ui";
 import { useId, useRef, useState } from "react";
 import { toast } from "sonner";
@@ -13,8 +13,8 @@ export type NotificationPrefs = Record<PrefKey, boolean>;
 const ROWS: { key: PrefKey; label: string; hint: string }[] = [
   { key: "notifyExpenses", label: "When someone adds an expense with you", hint: "Who added it and what your share is." },
   { key: "notifyPayments", label: "When someone records a payment with you", hint: "Who paid whom, and how much." },
-  { key: "notifyReminders", label: "Reminders when you owe someone", hint: "A friend's or group member's nudge to pay them back." },
-  { key: "weeklyDigest", label: "Weekly summary (Mondays)", hint: "Your balances once a week. We skip it when you're all settled up." },
+  { key: "notifyReminders", label: "Reminders when you owe someone", hint: "A friend's nudge to pay them back. If notifications are off on all your devices, we email it instead." },
+  { key: "weeklyDigest", label: "Weekly summary (Mondays)", hint: "Your balances once a week, as a notification. We skip it when you're all settled up." },
 ];
 
 /** Jumps to the "Resend link" button at the top of Account (EmailStatus) and focuses it, so keyboard users land on it. */
@@ -57,23 +57,10 @@ export function NotificationSettings({ initial, emailVerified, email }: { initia
 
   return (
     <div>
-      {emailVerified ? (
-        <p className="-mt-1 mb-4 text-body-sm text-ink-muted">
-          Choose which emails we send to <span className="font-semibold text-ink [overflow-wrap:anywhere]">{email}</span>. Changes save
-          straight away, and every email has an unsubscribe link too.
-        </p>
-      ) : (
-        <div className="-mt-1 mb-4 flex items-start gap-3 rounded-[10px] border border-rule bg-surface px-3 py-2.5" data-testid="notifications-unconfirmed">
-          <CircleAlert className="mt-0.5 size-[18px] shrink-0 text-ink-muted" aria-hidden />
-          <p className="text-body-sm text-ink">
-            We only send emails to confirmed addresses, so you won&apos;t get any of these until you confirm{" "}
-            <span className="font-semibold [overflow-wrap:anywhere]">{email}</span>.{" "}
-            <a href="#email-status" onClick={focusResend} className="font-semibold underline underline-offset-4">
-              Resend the confirmation link
-            </a>
-          </p>
-        </div>
-      )}
+      <h3 className="mb-1 text-body-sm font-semibold text-ink">What to notify me about</h3>
+      <p className="mb-4 text-body-sm text-ink-muted">
+        Applies to every device where notifications are on. Changes save straight away.
+      </p>
 
       <ul className="divide-y divide-rule border-y border-rule">
         {ROWS.map(({ key, label, hint }) => {
@@ -107,6 +94,19 @@ export function NotificationSettings({ initial, emailVerified, email }: { initia
           );
         })}
       </ul>
+      <p className="mt-4 text-body-sm text-ink-muted" data-testid="email-policy">
+        To keep your inbox quiet, we only email{" "}
+        <span className="font-semibold text-ink [overflow-wrap:anywhere]">{email}</span> when we have to: to confirm your address, reset
+        your password, invite you, or pass on a reminder when notifications are off.
+        {emailVerified ? null : (
+          <>
+            {" "}Reminder emails need a confirmed address.{" "}
+            <a href="#email-status" onClick={focusResend} className="font-semibold underline underline-offset-4">
+              Resend the confirmation link
+            </a>
+          </>
+        )}
+      </p>
     </div>
   );
 }

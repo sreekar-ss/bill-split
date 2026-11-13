@@ -1,60 +1,10 @@
-import { readFileSync } from "node:fs";
-import type { Page } from "@playwright/test";
-import { PUSH_OUTBOX } from "../../playwright.config";
 import { addExpense, expectToast, makeUser, register, setupGroup, signedIn } from "./helpers";
 import { expect, test } from "./fixtures";
-
-/**
- * Headless Chromium can't reach a real push service, so the browser's PushManager is stubbed at the
- * boundary: it hands back a fake subscription on the allow-listed test host. Permission, service
- * worker registration, the server storing the device, and server-side sending are all real.
- */
-async function stubPush(page: Page, endpoint: string) {
-  await page.addInitScript((ep) => {
-    const keys = { p256dh: "B".repeat(87), auth: "A".repeat(22) };
-    // Headless Chromium reports notifications as "denied" regardless of grants; start at "default"
-    // and let the (real) user tap grant it, like a person accepting the prompt.
-    let permission: NotificationPermission = (sessionStorage.getItem("stub-perm") as NotificationPermission) || "default";
-    Object.defineProperty(Notification, "permission", { get: () => permission, configurable: true });
-    Notification.requestPermission = async () => {
-      permission = "granted";
-      sessionStorage.setItem("stub-perm", permission);
-      return permission;
-    };
-    let current: unknown = null;
-    const make = () => ({
-      endpoint: ep,
-      toJSON: () => ({ endpoint: ep, keys }),
-      unsubscribe: async () => {
-        current = null;
-        sessionStorage.removeItem("stub-sub");
-        return true;
-      },
-    });
-    // The subscription outlives reloads, like a real one.
-    if (sessionStorage.getItem("stub-sub") === "1") current = make();
-    PushManager.prototype.getSubscription = async function () {
-      return current as PushSubscription | null;
-    };
-    PushManager.prototype.subscribe = async function () {
-      current = make();
-      sessionStorage.setItem("stub-sub", "1");
-      return current as PushSubscription;
-    };
-  }, endpoint);
-}
-
-function pushesTo(endpoint: string) {
-  return readFileSync(PUSH_OUTBOX, "utf8")
-    .split("\n")
-    .filter(Boolean)
-    .map((l) => JSON.parse(l) as { endpoint: string; title: string; body: string; url: string })
-    .filter((p) => p.endpoint === endpoint);
-}
+import { pushesTo, stubPush } from "./push";
 
 test("turn on push for this device, get a test and a real notification, turn it off", async ({ page, browser }, info) => {
   const endpoint = `https://push.test/${info.testId}-${info.project.name}`;
-  await stubPush(page, endpoint);
+  await stubPush(page, endpoint, { quietPrompt: true });
   const { others, url } = await setupGroup(page, browser, info, "Flat", "Ana", "Ben");
   const ben = others[0];
 
@@ -66,7 +16,8 @@ test("turn on push for this device, get a test and a real notification, turn it 
   await expect(toggle).toBeChecked();
 
   await page.getByRole("button", { name: "Send a test notification" }).click();
-  await expectToast(page, "Test sent");
+  // The stubbed push service never reaches the real service worker, so the page reports it didn't arrive.
+  await expect(page.getByRole("status").filter({ hasText: "We sent it" })).toBeVisible({ timeout: 20_000 });
   await expect.poll(() => pushesTo(endpoint).map((p) => p.title)).toEqual(["Notifications are on"]);
 
   // Ben adds an expense with Ana → Ana's device gets it.
@@ -106,4 +57,31 @@ test.describe("iPhone Safari (not installed)", () => {
     await page.getByRole("button", { name: "Add to Home Screen" }).first().click();
     await expect(page.getByRole("dialog", { name: "Add BillSplit to your Home Screen" })).toBeVisible();
   });
+});
+
+test("after logging in, people are asked to turn on notifications (once), and 'Turn on' sets it up", async ({ page, browser }, info) => {
+  const endpoint = `https://push.test/prompt-${info.testId}-${info.project.name}`;
+  await stubPush(page, endpoint);
+  await setupGroup(page, browser, info, "Flat", "Ana", "Ben");
+  await page.goto("/home");
+  const prompt = page.getByRole("dialog", { name: "Turn on notifications?" });
+  await expect(prompt).toBeVisible({ timeout: 12_000 });
+  await prompt.getByRole("button", { name: "Turn on notifications" }).click();
+  await expectToast(page, "Notifications on");
+  await expect(prompt).toBeHidden();
+  await page.goto("/account#notifications");
+  await expect(page.getByRole("switch", { name: "Push notifications on this device" })).toBeChecked();
+});
+
+test("'Not now' hides the notifications prompt", async ({ page, browser }, info) => {
+  await stubPush(page, `https://push.test/notnow-${info.testId}-${info.project.name}`);
+  await setupGroup(page, browser, info, "Flat", "Ana", "Ben");
+  await page.goto("/home");
+  const prompt = page.getByRole("dialog", { name: "Turn on notifications?" });
+  await expect(prompt).toBeVisible({ timeout: 12_000 });
+  await prompt.getByRole("button", { name: "Not now" }).click();
+  await expect(prompt).toBeHidden();
+  await page.reload();
+  await page.waitForTimeout(7000);
+  await expect(page.getByRole("dialog", { name: "Turn on notifications?" })).toHaveCount(0);
 });

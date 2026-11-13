@@ -25,7 +25,7 @@ export function UnsubscribeConfirm({
   s: string;
   title: string;
   body: string;
-  /** Says what the button does, e.g. "Stop expense emails". */
+  /** Says what the button does, e.g. "Stop reminders". */
   confirmLabel: string;
 }) {
   const [done, setDone] = useState(false);

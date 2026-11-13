@@ -309,11 +309,15 @@ test("capture every screen", async ({ page, browser }, info) => {
     await shot("claim-account", { target: visitor });
 
     // Unsubscribe from an email's footer link: asks first, then confirms; a broken link explains itself.
-    const unsub = unsubscribeLink(await waitForMail(me.email, "Ben added Dinner at Taberna"));
+    // Everyday updates are push only, so the email is a reminder (Maya has no push device: it falls back to email).
+    await page.goto(friendUrl);
+    await page.getByRole("button", { name: "Remind Maya", exact: true }).first().click();
+    await expectToast(page, "Reminder sent to Maya");
+    const unsub = unsubscribeLink(await waitForMail(maya.email, /^Reminder from Ana Lima/));
     await visitor.goto(unsub);
-    await expect(visitor.getByRole("heading", { level: 1, name: "Stop emails about expenses?" })).toBeVisible();
+    await expect(visitor.getByRole("heading", { level: 1, name: "Stop reminders?" })).toBeVisible();
     await shot("unsubscribe", { target: visitor });
-    await visitor.getByRole("button", { name: "Stop expense emails" }).click();
+    await visitor.getByRole("button", { name: "Stop reminders" }).click();
     await expect(visitor.getByRole("heading", { level: 1, name: "Unsubscribed" })).toBeVisible();
     await shot("unsubscribed", { target: visitor });
     await visitor.goto(unsub.replace(/s=[^&]+/, "s=not-a-real-signature"));

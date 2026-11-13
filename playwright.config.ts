@@ -47,6 +47,7 @@ export default defineConfig({
       EMAIL_COOLDOWN_SECONDS: "0",
       CRON_SECRET,
       PUSH_TRANSPORT: "file",
+      EMAIL_OPTIONAL_DAILY_CAP: "1000000",
       PUSH_OUTBOX,
     },
   },

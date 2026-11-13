@@ -61,12 +61,12 @@ export default async function AccountPage() {
 
         {/* id: deep link from the /unsubscribe page and emails ("turn them back on in Account"). */}
         <div id="notifications" className="scroll-mt-6">
-          {pushKey ? (
-            <Section title="Push notifications">
-              <PushSettings publicKey={pushKey} />
-            </Section>
-          ) : null}
-          <Section title="Email notifications">
+          <Section title="Notifications">
+            {pushKey ? (
+              <div className="mb-6">
+                <PushSettings publicKey={pushKey} />
+              </div>
+            ) : null}
             <NotificationSettings
               email={profile.email}
               emailVerified={profile.emailVerified}

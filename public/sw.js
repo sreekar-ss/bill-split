@@ -28,8 +28,16 @@ self.addEventListener("push", (event) => {
     tag: typeof data.tag === "string" ? data.tag.slice(0, 80) : undefined,
     data: { url: safePath(data.url) },
   };
-  // iOS and Chrome require every push to show a notification (userVisibleOnly).
-  event.waitUntil(self.registration.showNotification(title, options));
+  // iOS and Chrome require every push to show a notification (userVisibleOnly). Open BillSplit tabs
+  // are told it arrived, so "Send a test notification" can tell "arrived but hidden by the OS" apart
+  // from "never arrived".
+  event.waitUntil(
+    (async () => {
+      await self.registration.showNotification(title, options);
+      const windows = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
+      for (const client of windows) client.postMessage({ type: "push-received", tag: options.tag });
+    })(),
+  );
 });
 
 self.addEventListener("notificationclick", (event) => {

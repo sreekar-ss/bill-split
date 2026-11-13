@@ -30,6 +30,20 @@ MVP1 (live since 2026-11-12) lets people split costs with others who already hav
   - In-app browsers: "open in Safari" instead.
   - It only opens by itself on phones, for users with a group or friend, once per session. "Not now" hides it for 30 days. It's always available from Account → Install the app.
 
+## Notification channels and email budget (2026-11-13)
+Resend's free plan allows 3,000 emails a month and 100 a day, so email is kept for when it's needed:
+
+| Event | Push | Email |
+|---|---|---|
+| Expense added, payment recorded, recurring expense created | ✓ | — |
+| Weekly summary (opt-in) | ✓ | — |
+| Reminder | ✓ | only if the person has no push device |
+| Confirm email, password reset, invite to someone without an account | — | ✓ (always) |
+
+- Optional emails (reminder fallbacks) are skipped once the day's count reaches `EMAIL_OPTIONAL_DAILY_CAP` (default 80). Required emails always send.
+- "Turn on notifications?" prompt: appears ~6s after opening the app when push is supported and permission hasn't been decided. Once per session, never in the same session as the install prompt, and "Not now" hides it for 14 days.
+- "Send a test notification" reports whether the push reached the browser, which separates "the OS is hiding notifications" from "it never arrived".
+
 ## Milestone C — travel-ready
 | Feature | Scope |
 |---|---|

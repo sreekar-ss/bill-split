@@ -16,10 +16,14 @@ import { hit } from "./rate-limit";
 import { sign, verifySignature } from "./tokens";
 
 /**
- * Email notifications. Rules:
- * - only active users with a CONFIRMED email are ever notified (no mail to squatted/typo addresses);
- * - each type respects the user's preference and carries a one-click unsubscribe link;
- * - the actor never gets an email about their own action;
+ * Notifications. Channel policy (email is a scarce budget — Resend free plan):
+ * - everyday updates (expense added, payment recorded, weekly summary) go by PUSH only;
+ * - reminders go by push, and by email only when the person has no push device;
+ * - account emails (confirm email, password reset, invites) live elsewhere and always send.
+ * Rules:
+ * - only active users are notified; EMAIL additionally needs a confirmed address (no mail to squatted/typo addresses);
+ * - each type has one preference covering push and email (unsubscribing turns that type off everywhere);
+ * - the actor is never notified about their own action;
  * - delivery failures are logged, never surfaced to the actor.
  */
 export const NOTIFICATION_TYPES = ["expenses", "payments", "reminders", "digest"] as const;
@@ -88,12 +92,14 @@ function canPush(u: Recipient, type: NotificationType) {
   return u.status === "active" && u[PREF_FIELD[type]] !== false;
 }
 
-async function deliver(email: ReturnType<typeof renderEmail>) {
-  if (!isEmailConfigured()) return;
+/** Notification emails are optional: they're skipped once the day's email budget is used up. */
+async function deliver(email: ReturnType<typeof renderEmail>): Promise<boolean> {
+  if (!isEmailConfigured()) return false;
   try {
-    await sendEmail(email);
+    return await sendEmail(email, { priority: "optional" });
   } catch (error) {
     console.error("[notify] could not send", error);
+    return false;
   }
 }
 
@@ -134,40 +140,19 @@ export async function notifyExpenseCreated(expenseId: string, actorId: string, o
   for (const s of e.splits) {
     const u = s.user;
     if (u.id === actorId) continue;
-    const email = canEmail(u, "expenses");
-    const push = canPush(u, "expenses");
-    if (!email && !push) continue;
+    // Push only: email is reserved for things with no other channel (see the policy at the top).
+    if (!canPush(u, "expenses")) continue;
     const stake = stakeInExpense(u.id, ledgerExpense);
     if (stake === 0 && s.amountCents === 0) continue;
     const share = formatMoney(s.amountCents, e.currency);
-    const payer = u.id === e.paidById ? "You paid" : `${displayName(e.paidBy)} paid`;
-    const lead = opts.recurring
-      ? `A recurring expense, ${e.description}, was added${where}.`
-      : `${actor?.name ?? "Someone"} added ${e.description}${where}.`;
     const effect =
       stake > 0 ? `You get back ${formatMoney(stake, e.currency)}.` : stake < 0 ? `You owe ${formatMoney(-stake, e.currency)}.` : "";
-    if (email) {
-      await deliver(
-        renderEmail({
-          to: u.email,
-          subject: opts.recurring ? `${e.description}: recurring expense added` : `${actor?.name ?? "Someone"} added ${e.description}`,
-          greeting: `Hi ${u.name},`,
-          paragraphs: [lead, `${payer} ${formatMoney(e.amountCents, e.currency)}. Your share is ${share}. ${effect}`.trim()],
-          button: { label: "View expense", url: `${appUrl()}/expenses/${e.id}` },
-          notes: ["You're getting this because you're part of this expense."],
-          unsubscribeUrl: unsubscribeUrl(u.id, "expenses"),
-          oneClickUrl: oneClickUnsubscribeUrl(u.id, "expenses"),
-        }),
-      );
-    }
-    if (push) {
-      await sendPushToUser(u.id, {
-        title: opts.recurring ? `${e.description} added (recurring)` : `${actor?.name ?? "Someone"} added ${e.description}`,
-        body: `${effect || `Your share is ${share}.`}${where ? ` ${where.trim().replace(/^in /, "In ")}.` : ""}`,
-        url: `/expenses/${e.id}`,
-        tag: `expense-${e.id}`,
-      });
-    }
+    await sendPushToUser(u.id, {
+      title: opts.recurring ? `${e.description} added (recurring)` : `${actor?.name ?? "Someone"} added ${e.description}`,
+      body: `${effect || `Your share is ${share}.`}${where ? ` ${where.trim().replace(/^in /, "In ")}.` : ""}`,
+      url: `/expenses/${e.id}`,
+      tag: `expense-${e.id}`,
+    });
   }
 }
 
@@ -195,7 +180,6 @@ export async function notifyPaymentRecorded(paymentId: string, actorId: string) 
   ] as const) {
     if (u.id === actorId) continue;
     const path = p.groupId ? `/groups/${p.groupId}` : `/friends/${other.id}`;
-    const link = `${appUrl()}${path}`;
     if (canPush(u, "payments")) {
       await sendPushToUser(u.id, {
         title: u.id === p.toUser.id ? `${displayName(p.fromUser)} paid you ${amount}` : `Payment of ${amount} recorded`,
@@ -204,18 +188,6 @@ export async function notifyPaymentRecorded(paymentId: string, actorId: string) 
         tag: `payment-${paymentId}`,
       });
     }
-    if (!canEmail(u, "payments")) continue;
-    await deliver(
-      renderEmail({
-        to: u.email,
-        subject: u.id === p.toUser.id ? `${displayName(p.fromUser)} paid you ${amount}` : `Payment of ${amount} recorded`,
-        greeting: `Hi ${u.name},`,
-        paragraphs: [line, "If this doesn't look right, open BillSplit to check or delete it."],
-        button: { label: "Open balances", url: link },
-        unsubscribeUrl: unsubscribeUrl(u.id, "payments"),
-        oneClickUrl: oneClickUnsubscribeUrl(u.id, "payments"),
-      }),
-    );
   }
 }
 
@@ -278,11 +250,12 @@ export async function sendReminder(fromUserId: string, input: { toUserId: string
         tag: `reminder-${fromUserId}`,
       })
     : 0;
-  // Not deliverable by email: say so honestly unless a push went out; the cooldown still applies.
-  if (!canEmail(to, "reminders")) return { delivered: pushed > 0, name: displayName(to) };
+  // Push reached them: no email needed. Otherwise email is the fallback (if allowed and in budget).
+  if (pushed > 0) return { delivered: true, name: displayName(to) };
+  if (!canEmail(to, "reminders")) return { delivered: false, name: displayName(to) };
 
   const links = paymentLinks(from, owedCents, currency, `BillSplit${where}`);
-  await deliver(
+  const emailed = await deliver(
     renderEmail({
       to: to.email,
       subject: `Reminder from ${from.name}: ${amount}${where}`,
@@ -299,7 +272,7 @@ export async function sendReminder(fromUserId: string, input: { toUserId: string
       oneClickUrl: oneClickUnsubscribeUrl(to.id, "reminders"),
     }),
   );
-  return { delivered: true, name: displayName(to) };
+  return { delivered: emailed, name: displayName(to) };
 }
 
 /** "Venmo", "Venmo or PayPal", "Venmo, PayPal or Cash App". */
@@ -313,47 +286,40 @@ function joinOr(items: string[]) {
 export async function sendWeeklyDigests(now = new Date()) {
   const cutoff = new Date(now.getTime() - 6 * 86400000);
   const notRecent = [{ lastDigestAt: null }, { lastDigestAt: { lt: cutoff } }];
+  // Push only (email budget): people who opted in and have at least one device.
   const due = await db.user.findMany({
-    where: { status: "active", emailVerified: true, weeklyDigest: true, OR: notRecent },
-    select: { id: true, name: true, email: true, defaultCurrency: true },
+    where: { status: "active", weeklyDigest: true, pushSubscriptions: { some: {} }, OR: notRecent },
+    select: { id: true },
     // Oldest first, so a backlog over `take` is worked through instead of re-picking the same people.
     orderBy: { lastDigestAt: { sort: "asc", nulls: "first" } },
     take: 500,
   });
   let sent = 0;
   for (const u of due) {
-    // Claim this user's week atomically: if another run (a cron retry, a manual run) got here
-    // first, it already sent their digest.
+    // Claim this user's week atomically: a cron retry or manual run won't send twice.
     const { count } = await db.user.updateMany({ where: { id: u.id, OR: notRecent }, data: { lastDigestAt: now } });
     if (count === 0) continue;
     const relations = await computeRelations(u.id);
-    const lines: string[] = [];
-    const ids = [...relations.keys()];
-    const names = new Map(
-      (await db.user.findMany({ where: { id: { in: ids } }, select: { id: true, name: true, status: true } })).map((p) => [p.id, displayName(p)]),
-    );
+    // Per currency: what you're owed and what you owe, and how many people.
+    const totals = new Map<string, { owed: number; owe: number }>();
+    const people = new Set<string>();
     for (const [id, rel] of relations) {
       for (const c of rel.byContext) {
         if (c.cents === 0) continue;
-        const who = names.get(id) ?? "Someone";
-        const amt = formatMoney(Math.abs(c.cents), c.context.currency);
-        const ctx = c.context.kind === "group" ? ` (${c.context.name})` : "";
-        lines.push(c.cents > 0 ? `${who} owes you ${amt}${ctx}` : `You owe ${who} ${amt}${ctx}`);
+        people.add(id);
+        const t = totals.get(c.context.currency) ?? { owed: 0, owe: 0 };
+        if (c.cents > 0) t.owed += c.cents;
+        else t.owe -= c.cents;
+        totals.set(c.context.currency, t);
       }
     }
-    if (lines.length === 0) continue;
-    await deliver(
-      renderEmail({
-        to: u.email,
-        subject: "Your BillSplit week: who owes what",
-        greeting: `Hi ${u.name},`,
-        paragraphs: ["Here's where your balances stand:", ...lines.slice(0, 15), ...(lines.length > 15 ? [`…and ${lines.length - 15} more.`] : [])],
-        button: { label: "Open BillSplit", url: `${appUrl()}/home` },
-        unsubscribeUrl: unsubscribeUrl(u.id, "digest"),
-        oneClickUrl: oneClickUnsubscribeUrl(u.id, "digest"),
-      }),
-    );
-    sent++;
+    if (people.size === 0) continue; // all settled: nothing to say
+    const parts = [...totals].flatMap(([cur, t]) => [
+      ...(t.owed ? [`you're owed ${formatMoney(t.owed, cur)}`] : []),
+      ...(t.owe ? [`you owe ${formatMoney(t.owe, cur)}`] : []),
+    ]);
+    const body = `${parts.join(", ").replace(/^./, (c) => c.toUpperCase())}, across ${people.size} ${people.size === 1 ? "person" : "people"}.`;
+    if ((await sendPushToUser(u.id, { title: "Your BillSplit week", body, url: "/home", tag: "weekly-summary" })) > 0) sent++;
   }
   return { considered: due.length, sent };
 }

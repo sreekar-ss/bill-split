@@ -5,6 +5,7 @@ import { Switch } from "radix-ui";
 import { useEffect, useId, useState } from "react";
 import { toast } from "sonner";
 import { removePushSubscriptionAction, savePushSubscriptionAction, sendTestPushAction } from "@/app/actions/push";
+import { enablePush, waitForPushArrival } from "@/lib/pwa/push-client";
 import { Button } from "@/components/ui/button";
 import { runAction } from "@/lib/client/run-action";
 import { useInstallApp } from "./install-app";
@@ -16,11 +17,6 @@ import { useInstallApp } from "./install-app";
  */
 type State = "loading" | "unsupported" | "needs-install" | "denied" | "off" | "on";
 
-function urlBase64ToUint8Array(base64: string) {
-  const padding = "=".repeat((4 - (base64.length % 4)) % 4);
-  const raw = atob((base64 + padding).replace(/-/g, "+").replace(/_/g, "/"));
-  return Uint8Array.from(raw, (c) => c.charCodeAt(0));
-}
 
 const supported = () => typeof window !== "undefined" && "serviceWorker" in navigator && "PushManager" in window && "Notification" in window;
 
@@ -28,6 +24,7 @@ export function PushSettings({ publicKey }: { publicKey: string | null }) {
   const install = useInstallApp();
   const [state, setState] = useState<State>("loading");
   const [busy, setBusy] = useState(false);
+  const [testResult, setTestResult] = useState<string | null>(null);
   const id = useId();
 
   useEffect(() => {
@@ -59,27 +56,12 @@ export function PushSettings({ publicKey }: { publicKey: string | null }) {
   async function turnOn() {
     setBusy(true);
     try {
-      // Ask first, straight from the tap: Safari only shows the prompt inside a user gesture.
-      const permission = await Notification.requestPermission();
-      if (permission !== "granted") {
-        setState(permission === "denied" ? "denied" : "off");
-        return;
-      }
-      const reg = await navigator.serviceWorker.register("/sw.js");
-      await navigator.serviceWorker.ready;
-      const sub =
-        (await reg.pushManager.getSubscription()) ??
-        (await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlBase64ToUint8Array(publicKey!) }));
-      const res = await runAction(() => savePushSubscriptionAction(sub.toJSON()));
-      if (!res.ok) {
-        await sub.unsubscribe().catch(() => {});
-        toast.error(res.error);
-        return;
-      }
-      setState("on");
-      toast.success("Push notifications on");
-    } catch {
-      toast.error("Couldn't turn on notifications on this device. Try again.");
+      const res = await enablePush(publicKey!);
+      if (res.ok) {
+        setState("on");
+        toast.success("Push notifications on");
+      } else if (res.reason === "denied") setState("denied");
+      else if (res.reason === "error") toast.error(res.message ?? "Couldn't turn on notifications on this device. Try again.");
     } finally {
       setBusy(false);
     }
@@ -102,10 +84,16 @@ export function PushSettings({ publicKey }: { publicKey: string | null }) {
   }
 
   async function test() {
+    setTestResult("Sending…");
+    const arrival = waitForPushArrival("test");
     const res = await runAction(() => sendTestPushAction());
-    if (!res.ok) toast.error(res.error);
-    else if (res.data.delivered > 0) toast.success("Test sent. It should arrive in a few seconds.");
-    else toast.error("We couldn't reach this device. Turn notifications off and on again.");
+    if (!res.ok) return setTestResult(res.error);
+    if (res.data.delivered === 0) return setTestResult("We couldn't reach this device. Turn notifications off and on again.");
+    setTestResult(
+      (await arrival)
+        ? "It reached this browser. If no notification popped up, your device is hiding them: on a Mac, open System Settings, then Notifications, and allow your browser; on Windows, Settings, then System, then Notifications. Also check Focus or Do Not Disturb."
+        : "We sent it, but it hasn't reached this browser yet. Keep the browser open and try again in a minute. If it still doesn't arrive, turn notifications off and on again.",
+    );
   }
 
   if (state === "loading") return <div className="h-16" aria-busy="true" />;
@@ -128,7 +116,7 @@ export function PushSettings({ publicKey }: { publicKey: string | null }) {
   }
 
   if (state === "unsupported") {
-    return <p className="text-body-sm text-ink-muted">This browser doesn&apos;t support push notifications. Email notifications below still work.</p>;
+    return <p className="text-body-sm text-ink-muted">This browser doesn&apos;t support push notifications. Try BillSplit installed on your phone, or Chrome, Edge, Firefox or Safari on a computer.</p>;
   }
 
   if (state === "denied") {
@@ -151,7 +139,7 @@ export function PushSettings({ publicKey }: { publicKey: string | null }) {
             Push notifications on this device
           </label>
           <p id={`${id}-hint`} className="mt-0.5 text-meta text-ink-muted">
-            Same updates as the emails below, as notifications on this phone or computer.
+            Updates from BillSplit as notifications on this phone or computer.
           </p>
         </div>
         <Switch.Root
@@ -168,10 +156,15 @@ export function PushSettings({ publicKey }: { publicKey: string | null }) {
         </Switch.Root>
       </div>
       {state === "on" ? (
-        <Button variant="secondary" size="sm" onClick={test}>
-          <BellRing aria-hidden />
-          Send a test notification
-        </Button>
+        <>
+          <Button variant="secondary" size="sm" onClick={test} disabled={testResult === "Sending…"}>
+            <BellRing aria-hidden />
+            Send a test notification
+          </Button>
+          <p role="status" className="text-body-sm text-ink-muted empty:hidden">
+            {testResult}
+          </p>
+        </>
       ) : null}
     </div>
   );

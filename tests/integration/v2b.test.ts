@@ -5,6 +5,7 @@ import { createExpense } from "@/lib/server/expenses";
 import { addFriendByEmail, removeFriend } from "@/lib/server/friends";
 import { addMemberByEmail, createGroup } from "@/lib/server/groups";
 import { sentEmails } from "@/lib/server/mailer";
+import { savePushSubscription, sentPushes } from "@/lib/server/push";
 import {
   notifyExpenseCreated, notifyPaymentRecorded, sendReminder, sendWeeklyDigests, unsubscribe, unsubscribeUrl, updateNotificationPrefs,
 } from "@/lib/server/notifications";
@@ -22,18 +23,24 @@ async function user(name: string, verified = true) {
 }
 const mailsTo = (email: string) => sentEmails.filter((m) => m.to === email);
 
+const device = (u: { id: string }) =>
+  savePushSubscription(u.id, { endpoint: `https://push.test/v2b-${u.id}`, keys: { p256dh: "B".repeat(87), auth: "A".repeat(22) } });
+const pushesTo = (u: { id: string }) => sentPushes.filter((p) => p.endpoint === `https://push.test/v2b-${u.id}`);
+
 beforeEach(() => {
+  sentPushes.length = 0;
   sentEmails.length = 0;
 });
 
 describe("expense & payment notifications", () => {
-  it("emails confirmed participants who opted in, never the actor", async () => {
+  it("expenses and payments notify by push only (no email), respecting preferences, never the actor", async () => {
     const [ana, ben, cy, dee] = await Promise.all([user("Ana"), user("Ben"), user("Cy", false), user("Dee")]);
     const g = await createGroup(ana.id, { name: "Lisbon" });
     for (const u of [ben, cy, dee]) await addMemberByEmail(ana.id, g.id, { email: u.email }).catch(async () => {
       // unconfirmed accounts can't be added by email; add directly for this test
       await db.groupMember.create({ data: { groupId: g.id, userId: u.id } });
     });
+    for (const u of [ana, ben, cy, dee]) await device(u);
     await updateNotificationPrefs(dee.id, { notifyExpenses: false });
     sentEmails.length = 0;
 
@@ -42,19 +49,18 @@ describe("expense & payment notifications", () => {
       split: { method: "equal", entries: [ana, ben, cy, dee].map((u) => ({ userId: u.id })) },
     });
     await notifyExpenseCreated(e.id, ana.id);
-    expect(sentEmails.map((m) => m.to)).toEqual([ben.email]);
-    const mail = mailsTo(ben.email)[0];
-    expect(mail.subject).toBe("Ana added Dinner");
-    expect(mail.text).toContain("Your share is $20.00");
-    expect(mail.text).toContain("You owe $20.00");
-    expect(mail.headers?.["List-Unsubscribe-Post"]).toBe("List-Unsubscribe=One-Click");
-    expect(mail.headers?.["List-Unsubscribe"]).toContain("/api/unsubscribe?");
+    expect(sentEmails).toHaveLength(0); // email budget: everyday updates never email
+    expect(pushesTo(ana)).toHaveLength(0); // the actor
+    expect(pushesTo(dee)).toHaveLength(0); // turned expenses off
+    expect(pushesTo(ben)).toEqual([expect.objectContaining({ title: "Ana added Dinner", body: "You owe $20.00. In Lisbon." })]);
+    expect(pushesTo(cy)).toHaveLength(1); // push doesn't need a confirmed email
 
-    sentEmails.length = 0;
+    sentPushes.length = 0;
     const p = await recordPayment(ben.id, { groupId: g.id, fromUserId: ben.id, toUserId: ana.id, amountCents: 2000 });
-    await db.user.update({ where: { id: ana.id }, data: { emailVerified: true } });
     await notifyPaymentRecorded(p.id, ben.id);
-    expect(sentEmails.map((m) => [m.to, m.subject])).toEqual([[ana.email, "Ben paid you $20.00"]]);
+    expect(sentEmails).toHaveLength(0);
+    expect(pushesTo(ana)).toEqual([expect.objectContaining({ title: "Ben paid you $20.00", url: `/groups/${g.id}` })]);
+    expect(pushesTo(ben)).toHaveLength(0);
   });
 
   it("one-click unsubscribe is signed and idempotent", async () => {
@@ -141,30 +147,33 @@ describe("reminders", () => {
   });
 });
 
-describe("weekly digest", () => {
-  it("summarises open balances for opted-in users, once a week", async () => {
-    const [ana, ben, zed] = await Promise.all([user("Ana"), user("Ben"), user("Zed")]);
+describe("weekly summary", () => {
+  it("pushes a summary to opted-in people with a device, once a week, never by email", async () => {
+    const [ana, ben, zed, nod] = await Promise.all([user("Ana"), user("Ben"), user("Zed"), user("Nod")]);
+    for (const u of [ana, zed]) await device(u);
     await updateNotificationPrefs(ana.id, { weeklyDigest: true });
     await updateNotificationPrefs(zed.id, { weeklyDigest: true }); // all settled → skipped
+    await updateNotificationPrefs(nod.id, { weeklyDigest: true }); // no device → skipped
     const g = await createGroup(ana.id, { name: "Trip" });
     await addMemberByEmail(ana.id, g.id, { email: ben.email });
+    await addMemberByEmail(ana.id, g.id, { email: nod.email });
     await createExpense(ana.id, {
       groupId: g.id, description: "Hotel", amountCents: 4000, paidById: ana.id, date: "2026-11-03",
       split: { method: "equal", entries: [{ userId: ana.id }, { userId: ben.id }] },
     });
-    const now = new Date("2030-01-07T13:00:00Z");
-    sentEmails.length = 0; // drop sign-up confirmation emails
-    await sendWeeklyDigests(now);
-    expect(mailsTo(ana.email).map((m) => m.subject)).toEqual(["Your BillSplit week: who owes what"]);
-    expect(mailsTo(ana.email)[0].text).toContain("Ben owes you $20.00 (Trip)");
-    expect(mailsTo(zed.email)).toHaveLength(0);
     sentEmails.length = 0;
+    await sendWeeklyDigests(new Date("2030-01-07T13:00:00Z"));
+    expect(pushesTo(ana)).toEqual([expect.objectContaining({ title: "Your BillSplit week", body: "You're owed $20.00, across 1 person.", url: "/home" })]);
+    expect(pushesTo(zed)).toHaveLength(0);
+    expect(sentEmails).toHaveLength(0);
+    sentPushes.length = 0;
     await sendWeeklyDigests(new Date("2030-01-08T13:00:00Z"));
-    expect(mailsTo(ana.email)).toHaveLength(0);
+    expect(pushesTo(ana)).toHaveLength(0);
   });
 
   it("sends once even when two runs overlap", async () => {
     const [ana, ben] = await Promise.all([user("Ana"), user("Ben")]);
+    await device(ana);
     await updateNotificationPrefs(ana.id, { weeklyDigest: true });
     const g = await createGroup(ana.id, { name: "Trip" });
     await addMemberByEmail(ana.id, g.id, { email: ben.email });
@@ -173,9 +182,8 @@ describe("weekly digest", () => {
       split: { method: "equal", entries: [{ userId: ana.id }, { userId: ben.id }] },
     });
     const now = new Date("2031-01-06T13:00:00Z");
-    sentEmails.length = 0;
     await Promise.all([sendWeeklyDigests(now), sendWeeklyDigests(now)]);
-    expect(mailsTo(ana.email)).toHaveLength(1);
+    expect(pushesTo(ana)).toHaveLength(1);
   });
 });
 
@@ -198,9 +206,13 @@ describe("recurring expenses", () => {
     await expect(listRecurring((await user("Out")).id, { groupId: g.id })).rejects.toMatchObject({ code: "NOT_FOUND" });
 
     // The job didn't run for a while (downtime): it catches up on the dates that came due.
+    await device(ana);
+    await device(ben);
     sentEmails.length = 0;
     await expect(runDueRecurring("2026-11-17")).resolves.toMatchObject({ created: 2 });
-    expect(new Set(sentEmails.map((m) => m.to))).toEqual(new Set([ana.email, ben.email])); // recurring: creator is told too
+    expect(pushesTo(ana)).toHaveLength(2); // recurring: the creator is told too
+    expect(pushesTo(ben)).toHaveLength(2);
+    expect(sentEmails).toHaveLength(0);
     await expect(runDueRecurring("2026-11-17")).resolves.toMatchObject({ created: 0 });
     const dates = (await db.expense.findMany({ where: { recurringId: r.recurringId }, orderBy: { date: "asc" }, select: { date: true } })).map((e) =>
       e.date.toISOString().slice(0, 10),
@@ -312,5 +324,37 @@ describe("recurring expenses", () => {
     expect(await db.expense.count({ where: { recurringId: r.recurringId } })).toBe(1);
     const [row] = await listRecurring(ben.id, { groupId: g.id });
     expect(row).toMatchObject({ id: r.recurringId, paused: true, lastError: "The person who set this up is no longer in the group." });
+  });
+});
+
+describe("email budget", () => {
+  it("reminders go by push when possible and only email as a fallback", async () => {
+    const [ana, ben] = await Promise.all([user("Ana"), user("Ben")]);
+    const g = await createGroup(ana.id, { name: "Flat" });
+    await addMemberByEmail(ana.id, g.id, { email: ben.email });
+    await createExpense(ana.id, {
+      groupId: g.id, description: "Rent", amountCents: 100000, paidById: ana.id, date: "2026-11-01",
+      split: { method: "equal", entries: [{ userId: ana.id }, { userId: ben.id }] },
+    });
+    await device(ben);
+    sentEmails.length = 0;
+    await expect(sendReminder(ana.id, { toUserId: ben.id, groupId: g.id })).resolves.toMatchObject({ delivered: true });
+    expect(pushesTo(ben)).toEqual([expect.objectContaining({ title: "Reminder from Ana" })]);
+    expect(sentEmails).toHaveLength(0);
+  });
+
+  it("skips optional emails once the day's budget is used, but never required ones", async () => {
+    const { sendEmail } = await import("@/lib/server/mailer");
+    const saved = process.env.EMAIL_OPTIONAL_DAILY_CAP;
+    const mail = (to: string) => ({ to, subject: "s", text: "t", html: "<p>t</p>" });
+    try {
+      process.env.EMAIL_OPTIONAL_DAILY_CAP = "0";
+      sentEmails.length = 0;
+      await expect(sendEmail(mail("optional@test.dev"), { priority: "optional" })).resolves.toBe(false);
+      await expect(sendEmail(mail("required@test.dev"))).resolves.toBe(true);
+      expect(sentEmails.map((m) => m.to)).toEqual(["required@test.dev"]);
+    } finally {
+      process.env.EMAIL_OPTIONAL_DAILY_CAP = saved;
+    }
   });
 });

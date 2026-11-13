@@ -2,7 +2,8 @@ import type { APIRequestContext, Page } from "@playwright/test";
 import { CRON_SECRET } from "../../playwright.config";
 import { expect, test } from "./fixtures";
 import { dialog, expenseSheet, expectToast, fillExpense, setupGroup, setupUsers, shellAddExpense, signedIn } from "./helpers";
-import { mailsTo, waitForMail } from "./mail";
+import { mailsTo } from "./mail";
+import { pushEndpoint, pushTitles, signedInWithPush, waitForPush } from "./push";
 
 /** yyyy-mm-dd, `days` from today in UTC (the daily job's calendar). */
 function utcDay(days = 0): string {
@@ -70,9 +71,13 @@ async function addWeekly(page: Page, description: string, amount: string, date: 
 test.describe("recurring expenses", () => {
   test("a back-dated weekly expense doesn't back-fill; the daily job adds it idempotently, and it can be paused, resumed and stopped", async ({ page, browser }, info) => {
     test.setTimeout(90_000);
-    const { others } = await setupGroup(page, browser, info, "House", "Ana", "Ben");
+    const { me: ana, others } = await setupGroup(page, browser, info, "House", "Ana", "Ben");
     const [ben] = others;
     const groupUrl = page.url();
+    // Ben has push on for his device; Ana doesn't.
+    const benDevice = pushEndpoint(info, "ben");
+    await (await signedInWithPush(browser, ben, benDevice)).context().close();
+    await page.goto(groupUrl);
 
     // An end date before the first date is caught in the sheet.
     await shellAddExpense(page).click();
@@ -139,7 +144,7 @@ test.describe("recurring expenses", () => {
     await expect(ledgerRows(page, "Rent")).toHaveCount(1);
 
     // Run it: Rent adds today's (only); paused Cleaning adds nothing.
-    const benMails = mailsTo(ben.email).length;
+    const mailsBefore = { ana: mailsTo(ana.email).length, ben: mailsTo(ben.email).length };
     const first = await runCron(page.request);
     expect(first.date).toBe(utcDay(0));
     expect(first.recurring.created).toBeGreaterThanOrEqual(1);
@@ -148,15 +153,19 @@ test.describe("recurring expenses", () => {
     await expect(ledgerRows(page, "Rent").getByRole("img", { name: "Recurring" })).toHaveCount(2);
     await expect(ledgerRows(page, "Cleaning")).toHaveCount(1);
     await expect(recurringRow(page, "Rent")).toContainText(`Next ${short(utcDay(7))}`);
-    // The people in it hear about it, labelled as recurring.
-    const mail = await waitForMail(ben.email, "Rent: recurring expense added", { after: benMails });
-    expect(mail.text).toContain("A recurring expense, Rent, was added in House.");
+    // The people in it with push on hear about it, labelled as recurring; nobody is emailed.
+    const push = await waitForPush(benDevice, "Rent added (recurring)");
+    expect(push.body).toBe("You owe $50.00. In House.");
+    expect(push.url).toMatch(/^\/expenses\/[\w-]+$/);
 
-    // Running again the same day creates nothing new.
+    // Running again the same day creates nothing new (and notifies nobody again).
     await runCron(page.request);
     await page.reload();
     await expect(ledgerRows(page, "Rent")).toHaveCount(2);
     await expect(ledgerRows(page, "Cleaning")).toHaveCount(1);
+    expect(pushTitles(benDevice).filter((t) => t.endsWith("(recurring)"))).toEqual(["Rent added (recurring)"]);
+    expect(mailsTo(ben.email).slice(mailsBefore.ben)).toEqual([]);
+    expect(mailsTo(ana.email).slice(mailsBefore.ana)).toEqual([]);
 
     // Resume Cleaning: missed weeks aren't back-filled; it picks up from today.
     await page.getByRole("button", { name: "Options for Cleaning" }).click();

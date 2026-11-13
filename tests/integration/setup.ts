@@ -6,3 +6,4 @@ process.env.BCRYPT_ROUNDS = "4";
 process.env.MAIL_TRANSPORT = "memory";
 process.env.APP_URL = "https://app.example.test";
 process.env.PUSH_TRANSPORT = "memory";
+process.env.EMAIL_OPTIONAL_DAILY_CAP = "1000000";

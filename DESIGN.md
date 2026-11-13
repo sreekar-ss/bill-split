@@ -87,6 +87,7 @@ Inside a group, debts are simplified into a settle-up plan. The amount between y
 
 ## Motion
 - Sheets slide up (200ms, ease-out). Full-screen forms slide in from the right (200ms, ease-out). The balance beam bars grow from the centre once, on first render (300ms). While a page loads, a short bar slides along the top of the screen (shown after 150ms; a static full-width bar with reduced motion).
+- **Launch screen:** when the app opens (no BillSplit window open yet), the service worker shows the app mark on the manifest navy (`#13213F`) at once, its yellow slice tucking in and splitting out again (1.4s loop, still with reduced motion), until the first page is ready. It replaces the blank screen while the server wakes up, and never appears when moving around inside the app.
 - Apart from these, nothing animates on its own. Respect `prefers-reduced-motion` (no transitions).
 
 ## Copy voice

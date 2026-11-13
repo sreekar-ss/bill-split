@@ -3,13 +3,15 @@
 import { Activity, CircleUserRound, House, Plus, User, Users } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { ExpenseSheet } from "@/components/expenses/expense-sheet";
 import type { ExpenseDetail } from "@/lib/server/expenses";
 import type { ExpenseContexts } from "@/lib/server/groups";
 import { cn } from "@/lib/utils/cn";
 import { InstallAppProvider } from "@/components/pwa/install-app";
 import { NotificationPrompt } from "@/components/pwa/notification-prompt";
+import { OfflineIndicator } from "@/components/pwa/offline-indicator";
+import { OfflineSyncProvider } from "@/components/pwa/offline-sync";
 import { AddExpenseContext, type AddExpensePreset } from "./add-expense-context";
 
 const NAV = [
@@ -30,19 +32,38 @@ export function AppShell({ contexts, pushKey = null, children }: { contexts: Exp
   const api = useMemo(() => ({ openAddExpense, openEditExpense, canAddExpense }), [openAddExpense, openEditExpense, canAddExpense]);
 
   // Preset the sheet from the page we're on (group or friend page).
+  // An archived group isn't in contexts.groups (it's read-only), so its page offers no Add expense.
+  const routeGroupId = pathname.match(/^\/groups\/([^/]+)/)?.[1];
+  const onArchivedGroup = Boolean(routeGroupId) && !contexts.groups.some((g) => g.id === routeGroupId);
   const routePreset = useMemo<AddExpensePreset | undefined>(() => {
-    const g = pathname.match(/^\/groups\/([^/]+)/);
-    if (g) return { groupId: g[1] };
+    if (routeGroupId) return contexts.groups.some((g) => g.id === routeGroupId) ? { groupId: routeGroupId } : undefined;
     const f = pathname.match(/^\/friends\/([^/]+)/);
     if (f) return { friendId: f[1] };
     return undefined;
-  }, [pathname]);
+  }, [pathname, routeGroupId, contexts.groups]);
 
   const isActive = (href: string) => pathname === href || pathname.startsWith(`${href}/`);
-  const showPill = canAddExpense && !pathname.startsWith("/account");
+  const showAdd = canAddExpense && !onArchivedGroup;
+  // While someone is typing in a page field (e.g. a comment), the floating pill would sit over it
+  // and the keyboard: hide it until focus leaves the field. Fields inside sheets don't count.
+  const [typing, setTyping] = useState(false);
+  useEffect(() => {
+    const isField = (t: EventTarget | null) =>
+      t instanceof HTMLElement && t.matches("input:not([type=checkbox]):not([type=radio]):not([type=button]):not([type=submit]), textarea, select, [contenteditable=true]") && !t.closest("[role=dialog]");
+    const onIn = (e: FocusEvent) => setTyping(isField(e.target));
+    const onOut = () => setTyping(false);
+    document.addEventListener("focusin", onIn);
+    document.addEventListener("focusout", onOut);
+    return () => {
+      document.removeEventListener("focusin", onIn);
+      document.removeEventListener("focusout", onOut);
+    };
+  }, []);
+  const showPill = showAdd && !typing && !pathname.startsWith("/account");
 
   return (
     <AddExpenseContext.Provider value={api}>
+      <OfflineSyncProvider userId={contexts.me.id}>
       <InstallAppProvider engaged={canAddExpense}>
       <a href="#main" className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-50 focus:rounded-[10px] focus:bg-surface focus:px-3 focus:py-2">
         Skip to content
@@ -53,7 +74,7 @@ export function AppShell({ contexts, pushKey = null, children }: { contexts: Exp
           <Link href="/home" className="mb-8 px-3 text-title font-bold tracking-tight">
             BillSplit
           </Link>
-          {canAddExpense && (
+          {showAdd && (
             <button
               type="button"
               onClick={() => openAddExpense(routePreset)}
@@ -83,6 +104,7 @@ export function AppShell({ contexts, pushKey = null, children }: { contexts: Exp
         </nav>
 
         <main id="main" className="mx-auto w-full min-w-0 max-w-[1100px] px-4 pb-[calc(160px+env(safe-area-inset-bottom))] pt-6 md:px-6 lg:pb-12 lg:pt-10">
+          <OfflineIndicator />
           {children}
         </main>
       </div>
@@ -135,6 +157,7 @@ export function AppShell({ contexts, pushKey = null, children }: { contexts: Exp
       />
         <NotificationPrompt publicKey={pushKey} engaged={canAddExpense} />
       </InstallAppProvider>
+      </OfflineSyncProvider>
     </AddExpenseContext.Provider>
   );
 }

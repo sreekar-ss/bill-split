@@ -10,7 +10,7 @@ import { SESSION_COOKIE, sessionCookieOptions, shouldRefreshSession, signSession
  * after they actually signed in (then they sign in again). A stale version stays stale —
  * logout-everywhere and password changes still end it.
  */
-const APP_PREFIXES = ["/home", "/groups", "/friends", "/activity", "/account", "/expenses"];
+const APP_PREFIXES = ["/home", "/groups", "/friends", "/activity", "/account", "/expenses", "/insights"];
 const AUTH_PAGES = ["/login", "/register", "/forgot-password"];
 
 export async function proxy(request: NextRequest) {

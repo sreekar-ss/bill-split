@@ -20,7 +20,8 @@ import { CATEGORY_OPTIONS, currencyName, currencySymbol, isCategory } from "./ca
 import { SplitEditor, SplitStatusLine, type Participant } from "./split-editor";
 import { emptyDraft, evaluateSplit, type SplitDraft, type ValueMethod } from "./split-math";
 import { endsOnError, NO_REPEAT, RepeatFields, toRecurrence, type RepeatDraft } from "./repeat-fields";
-import { runAction } from "@/lib/client/run-action";
+import { runAction, UNREACHABLE_ERROR } from "@/lib/client/run-action";
+import { enqueueExpense, listQueuedExpenses, newClientId, removeQueuedExpense, type QueuedExpense } from "@/lib/pwa/offline-queue";
 import { displayName } from "@/lib/utils/person";
 
 export interface ExpenseSheetProps {
@@ -119,7 +120,8 @@ function editingKey(e: ExpenseDetail) {
 
 function initialTargetKey(targets: Target[], preset?: AddExpensePreset, editing?: ExpenseDetail): string {
   if (editing) return editingKey(editing);
-  const wanted = preset?.groupId ? `g:${preset.groupId}` : preset?.friendId ? `f:${preset.friendId}` : "";
+  const from = preset?.draft?.input ?? preset;
+  const wanted = from?.groupId ? `g:${from.groupId}` : from?.friendId ? `f:${from.friendId}` : "";
   if (wanted && targets.some((t) => t.key === wanted)) return wanted;
   return targets.length === 1 ? targets[0].key : "";
 }
@@ -142,6 +144,42 @@ function draftFromExpense(e: ExpenseDetail, participantIds: string[]): SplitDraf
   return draft;
 }
 
+/** A queued expense's split, back in the form's shape (when its group or friend is still offered). */
+function draftFromQueued(q: QueuedExpense, participantIds: string[]): SplitDraft {
+  const { method, entries } = q.input.split;
+  const draft = emptyDraft(participantIds, method);
+  const byUser = new Map(entries.map((e) => [e.userId, e]));
+  for (const id of participantIds) {
+    const e = byUser.get(id);
+    draft.included[id] = Boolean(e);
+    if (!e || e.value == null) continue;
+    if (method === "exact") draft.exact[id] = centsToInput(e.value);
+    if (method === "percentage") draft.percentage[id] = trimNumber(e.value);
+    if (method === "shares") draft.shares[id] = trimNumber(e.value);
+  }
+  return draft;
+}
+
+/** Another expense already waiting on this device that looks like the same one (likely re-entered). */
+async function findQueuedTwin(userId: string, input: ExpenseInput, clientId: string): Promise<QueuedExpense | null> {
+  try {
+    const items = await listQueuedExpenses();
+    return (
+      items.find(
+        (q) =>
+          q.userId === userId &&
+          q.clientId !== clientId &&
+          q.input.amountCents === input.amountCents &&
+          (q.input.groupId ?? null) === (input.groupId ?? null) &&
+          (q.input.friendId ?? null) === (input.friendId ?? null) &&
+          q.input.description.trim().toLowerCase() === input.description.trim().toLowerCase(),
+      ) ?? null
+    );
+  } catch {
+    return null;
+  }
+}
+
 function toFieldKey(serverKey: string): FieldKey | null {
   if (serverKey === "amountCents") return "amount";
   if (serverKey.startsWith("split")) return "split";
@@ -150,8 +188,16 @@ function toFieldKey(serverKey: string): FieldKey | null {
   return null;
 }
 
+/** Repeating expenses are set up on the server, so they can't wait in the offline queue. */
+const REPEAT_NEEDS_CONNECTION =
+  "Repeating expenses need a connection. Try again when you're back online, or set Repeat to Never to save it on this device.";
+const SAVED_OFFLINE = "Saved offline. We'll add it when you're back online.";
+
 function ExpenseSheetSession({ onOpenChange, contexts, preset, editing }: ExpenseSheetProps) {
   const formId = useId();
+  // Reviewing an expense saved on this device that the server refused (see OfflineSyncProvider).
+  const queued = editing ? undefined : preset?.draft;
+  const q = queued?.input;
   const me = contexts.me;
   const targets = useMemo(() => buildTargets(contexts, editing), [contexts, editing]);
 
@@ -159,18 +205,37 @@ function ExpenseSheetSession({ onOpenChange, contexts, preset, editing }: Expens
   const target = targets.find((t) => t.key === targetKey);
   const participantIds = useMemo(() => target?.participants.map((p) => p.id) ?? [], [target]);
 
-  const [amountText, setAmountText] = useState(() => (editing ? centsToInput(editing.amountCents) : ""));
-  const [description, setDescription] = useState(editing?.description ?? "");
-  const [paidById, setPaidById] = useState(editing?.paidBy.id ?? me.id);
-  const [date, setDate] = useState(() => editing?.date ?? todayInput());
-  const [category, setCategory] = useState<ExpenseCategory>(() => (editing && isCategory(editing.category) ? editing.category : "general"));
-  const [notes, setNotes] = useState(editing?.notes ?? "");
-  const [notesOpen, setNotesOpen] = useState(Boolean(editing?.notes));
-  const [draft, setDraft] = useState<SplitDraft>(() => (editing ? draftFromExpense(editing, participantIds) : emptyDraft(participantIds)));
+  // A queued draft's people only apply if its group or friend is still the one selected.
+  const queuedTargetKept = Boolean(q && target && (q.groupId ? `g:${q.groupId}` : `f:${q.friendId}`) === target.key);
+  const [amountText, setAmountText] = useState(() => (editing ? centsToInput(editing.amountCents) : q ? centsToInput(q.amountCents) : ""));
+  const [description, setDescription] = useState(editing?.description ?? q?.description ?? "");
+  const [paidById, setPaidById] = useState(() =>
+    editing ? editing.paidBy.id : q && queuedTargetKept && participantIds.includes(q.paidById) ? q.paidById : me.id,
+  );
+  const [date, setDate] = useState(() => editing?.date ?? q?.date ?? todayInput());
+  const [category, setCategory] = useState<ExpenseCategory>(() => {
+    const c = editing?.category ?? q?.category;
+    return c && isCategory(c) ? c : "general";
+  });
+  const [notes, setNotes] = useState(editing?.notes ?? q?.notes ?? "");
+  const [notesOpen, setNotesOpen] = useState(Boolean(editing?.notes ?? q?.notes));
+  const [draft, setDraft] = useState<SplitDraft>(() =>
+    editing
+      ? draftFromExpense(editing, participantIds)
+      : queued && queuedTargetKept
+        ? draftFromQueued(queued, participantIds)
+        : emptyDraft(participantIds),
+  );
   const [repeat, setRepeat] = useState<RepeatDraft>(NO_REPEAT);
   const [errors, setErrors] = useState<Partial<Record<FieldKey, string>>>({});
-  const [formError, setFormError] = useState<string | null>(null);
+  // A refused queued expense opens with the server's reason, so it's clear what to change.
+  const [formError, setFormError] = useState<string | null>(() => queued?.failed?.error ?? null);
+  /** Set once we've warned that a similar expense is already waiting on this device. */
+  const [twinWarned, setTwinWarned] = useState(false);
   const [pending, startTransition] = useTransition();
+  // One id per new expense, kept across retries, so a save that reached the server (or is replayed
+  // from the offline queue) is only ever added once. A reviewed queued item keeps its own id.
+  const [clientId] = useState(() => (editing ? undefined : (queued?.clientId ?? newClientId())));
 
   const descriptionRef = useRef<HTMLInputElement>(null);
   const amountRef = useRef<HTMLInputElement>(null);
@@ -192,6 +257,7 @@ function ExpenseSheetSession({ onOpenChange, contexts, preset, editing }: Expens
   const clearError = (key: FieldKey) => {
     if (errors[key]) setErrors((e) => ({ ...e, [key]: undefined }));
     if (formError) setFormError(null);
+    if (twinWarned) setTwinWarned(false);
   };
 
   function chooseTarget(key: string) {
@@ -201,6 +267,7 @@ function ExpenseSheetSession({ onOpenChange, contexts, preset, editing }: Expens
     setDraft(emptyDraft(next?.participants.map((p) => p.id) ?? []));
     setErrors({});
     setFormError(null);
+    setTwinWarned(false);
   }
 
   function setMethod(method: SplitMethod) {
@@ -249,12 +316,63 @@ function ExpenseSheetSession({ onOpenChange, contexts, preset, editing }: Expens
       category,
       notes: notes.trim() || undefined,
       split: { method: draft.method, entries: split.entries },
+      ...(clientId ? { clientId } : {}),
     };
 
+    const offline = typeof navigator !== "undefined" && navigator.onLine === false;
+    if (!editing && offline && recurrence) {
+      setErrors({});
+      setFormError(REPEAT_NEEDS_CONNECTION);
+      return;
+    }
+
+    /** Keep a new expense on this device for later. False when the device can't store it either. */
+    async function saveOffline(): Promise<boolean> {
+      if (!clientId || !target) return false;
+      try {
+        await enqueueExpense(
+          me.id,
+          { ...input, clientId },
+          { where: target.kind === "group" ? `In ${target.name}` : `With ${target.name}`, currency: target.currency },
+        );
+      } catch (error) {
+        console.error("[offline] couldn't queue the expense", error);
+        return false;
+      }
+      toast(SAVED_OFFLINE);
+      onOpenChange(false);
+      return true;
+    }
+
     startTransition(async () => {
+      // Offline saves are invisible in the ledger until they sync, so people re-enter them. Warn once.
+      if (!editing && clientId && !twinWarned) {
+        const twin = await findQueuedTwin(me.id, input, clientId);
+        if (twin) {
+          setErrors({});
+          setTwinWarned(true);
+          setFormError(`You already saved '${twin.input.description}' for this amount on this device. It's waiting to sync. Save it again anyway?`);
+          return;
+        }
+      }
+      if (!editing && offline) {
+        if (!(await saveOffline())) {
+          setErrors({});
+          setFormError(UNREACHABLE_ERROR);
+        }
+        return;
+      }
       const result = editing
         ? await runAction(() => updateExpenseAction(editing.id, input))
         : await runAction(() => createExpenseAction(input, recurrence));
+      if (!result.ok && !editing && result.error === UNREACHABLE_ERROR) {
+        if (recurrence) {
+          setErrors({});
+          setFormError(REPEAT_NEEDS_CONNECTION);
+          return;
+        }
+        if (await saveOffline()) return;
+      }
       if (!result.ok) {
         const mapped: Partial<Record<FieldKey, string>> = {};
         for (const [key, message] of Object.entries(result.fieldErrors ?? {})) {
@@ -271,6 +389,8 @@ function ExpenseSheetSession({ onOpenChange, contexts, preset, editing }: Expens
         else if (mapped.endsOn) endsOnRef.current?.focus();
         return;
       }
+      // A reviewed queued item is saved now: it no longer belongs on the device.
+      if (queued) await removeQueuedExpense(queued.clientId).catch(() => {});
       toast.success(recurrence ? "Recurring expense saved" : "Expense saved");
       onOpenChange(false);
     });
@@ -289,7 +409,7 @@ function ExpenseSheetSession({ onOpenChange, contexts, preset, editing }: Expens
       ) : null}
       {target ? <SplitStatusLine status={split.status} /> : null}
       <Button type="submit" form={formId} size="lg" className="w-full" disabled={!canSave}>
-        {pending ? "Saving…" : "Save expense"}
+        {pending ? "Saving…" : twinWarned ? "Save it again" : "Save expense"}
       </Button>
     </>
   );

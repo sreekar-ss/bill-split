@@ -1,13 +1,16 @@
-import { ChevronLeft } from "lucide-react";
+import { ChartColumn, ChevronLeft } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { cache } from "react";
+import { ArchivedBanner } from "@/components/groups/archive-controls";
 import { listNames, memberCount } from "@/components/groups/format";
+import { GroupAvatar } from "@/components/groups/group-avatar";
 import { GroupHeaderActions } from "@/components/groups/group-header-actions";
 import { GroupLedger } from "@/components/groups/group-ledger";
 import { SettlePlan } from "@/components/groups/settle-plan";
 import { RecurringList } from "@/components/recurring/recurring-list";
 import { BalanceBeam, type BeamRow } from "@/components/ui/balance-beam";
+import { buttonVariants } from "@/components/ui/button";
 import { PageHeader, Section } from "@/components/ui/page";
 import { requireUser } from "@/lib/auth/session";
 import { formatMoney } from "@/lib/domain/money";
@@ -75,7 +78,16 @@ export default async function GroupPage({ params }: Props) {
               Groups
             </Link>
           }
-          title={group.name}
+          title={
+            group.icon ? (
+              <span className="flex min-w-0 items-center gap-2.5">
+                <GroupAvatar id={group.id} name={group.name} icon={group.icon} size={36} />
+                <span className="truncate">{group.name}</span>
+              </span>
+            ) : (
+              group.name
+            )
+          }
           subtitle={
             <>
               <span className="block">{memberCount(group.members.length)}</span>
@@ -89,6 +101,8 @@ export default async function GroupPage({ params }: Props) {
                 id: group.id,
                 name: group.name,
                 currency: group.currency,
+                icon: group.icon,
+                archived: group.archived,
                 isAdmin: group.isAdmin,
                 currencyLocked: group.currencyLocked,
                 settled: group.settled,
@@ -97,6 +111,16 @@ export default async function GroupPage({ params }: Props) {
             />
           }
         />
+        {group.archived ? <ArchivedBanner groupId={group.id} /> : null}
+        {group.expenses.length > 0 ? (
+          <Link
+            href={`/groups/${group.id}/insights`}
+            className={buttonVariants({ variant: "ghost", className: group.archived ? "-ml-4 mb-3" : "-ml-4 -mt-2 mb-3" })}
+          >
+            <ChartColumn aria-hidden />
+            Spending
+          </Link>
+        ) : null}
       </div>
 
       <aside
@@ -105,7 +129,9 @@ export default async function GroupPage({ params }: Props) {
       >
         <Section title="Balances" action={totalSpent === 0 ? undefined : <span className="num text-body-sm text-ink-muted lg:hidden">{spent}</span>}>
           {solo ? (
-            <p className="text-body-sm text-ink-muted">Add a member to start splitting costs.</p>
+            <p className="text-body-sm text-ink-muted">
+              {group.archived ? "Nobody else was in this group." : "Add a member to start splitting costs."}
+            </p>
           ) : (
             <BalanceBeam rows={beam} currency={group.currency} label="Members' balances" />
           )}
@@ -113,7 +139,15 @@ export default async function GroupPage({ params }: Props) {
         {/* A group of one has nobody to settle with. */}
         {solo ? null : (
           <Section title="Settle up">
-            <SettlePlan groupId={group.id} plan={group.plan} people={people} meId={meId} currency={group.currency} paymentNote={group.name} />
+            <SettlePlan
+              groupId={group.id}
+              plan={group.plan}
+              people={people}
+              meId={meId}
+              currency={group.currency}
+              paymentNote={group.name}
+              readOnly={group.archived}
+            />
           </Section>
         )}
       </aside>
@@ -122,7 +156,7 @@ export default async function GroupPage({ params }: Props) {
       <div className="mt-8 min-w-0 lg:col-start-1 lg:row-start-2 lg:mt-6 lg:max-w-[720px]">
         {recurring.length > 0 ? (
           <Section title="Recurring">
-            <RecurringList items={recurring} />
+            <RecurringList items={recurring} readOnly={group.archived} />
           </Section>
         ) : null}
         <Section title="Expenses" action={totalSpent === 0 ? undefined : <span className="num hidden text-body-sm text-ink-muted lg:inline">{spent} in total</span>}>

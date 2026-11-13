@@ -38,7 +38,7 @@ test.skip(!process.env.SCREENS, "Screenshots only run with SCREENS=1");
 const SHOT_STYLE = "[data-sonner-toaster]{display:none !important} *{caret-color:transparent !important}";
 
 test("capture every screen", async ({ page, browser }, info) => {
-  test.setTimeout(240_000);
+  test.setTimeout(420_000);
   const dir = `reports/screens/${info.project.name}`;
   // Start clean so renumbered screens don't leave stale files behind.
   rmSync(dir, { recursive: true, force: true });
@@ -104,6 +104,15 @@ test("capture every screen", async ({ page, browser }, info) => {
 
   const groupUrl = await createGroup(page, "Lisbon trip", "EUR");
   for (const u of [ben, chloe, dev]) await addMember(page, u.email);
+  {
+    await page.getByRole("button", { name: "Group settings" }).click();
+    const settings = dialog(page, "Group settings");
+    await settings.locator("label").filter({ has: page.getByRole("radio", { name: "Plane" }) }).click();
+    await settings.getByRole("button", { name: "Save changes" }).click();
+    await expectToast(page, "Changes saved");
+    await settings.getByRole("button", { name: "Close" }).click();
+    await expect(settings).toBeHidden();
+  }
 
   await addExpense(page, { amount: "640", description: "Apartment in Alfama", category: "Travel", date: "2026-10-03" });
   // Ben records the dinner he paid for himself. Having dealt with the group, his payment handles now show to Ana.
@@ -182,6 +191,28 @@ test("capture every screen", async ({ page, browser }, info) => {
   await sheet.getByRole("radiogroup", { name: "Repeat" }).getByRole("radio", { name: "Monthly" }).click();
   await sheet.getByRole("button", { name: "Save expense" }).click();
   await expectToast(page, "Recurring expense saved");
+
+  // Ben asks about the surf lessons; Ana answers.
+  await page.goto(groupUrl);
+  await expenseLink(page, "Surf lessons").click();
+  await expect(page.getByRole("heading", { level: 1, name: "Surf lessons" })).toBeVisible();
+  const surfUrl = page.url();
+  {
+    const ctx = await browser.newContext();
+    const benPage = await ctx.newPage();
+    await benPage.goto("/login");
+    await login(benPage, ben.email, ben.password);
+    await expect(benPage).toHaveURL(/\/home$/);
+    await benPage.goto(surfUrl);
+    await benPage.getByRole("textbox", { name: "Add a comment" }).fill("Does this include the wetsuit hire? Chloe said it might be extra.");
+    await benPage.getByRole("button", { name: "Post comment" }).click();
+    await expect(benPage.getByText("Posting…")).toHaveCount(0);
+    await ctx.close();
+  }
+  await page.reload();
+  await page.getByRole("textbox", { name: "Add a comment" }).fill("It does, boards and wetsuits for all three mornings.");
+  await page.getByRole("button", { name: "Post comment" }).click();
+  await expect(page.getByText("Posting…")).toHaveCount(0);
 
   // An empty group.
   const emptyGroupUrl = await createGroup(page, "Book club");
@@ -264,12 +295,51 @@ test("capture every screen", async ({ page, browser }, info) => {
   await page.goto(friendUrl);
   await expect(page.getByRole("heading", { level: 1, name: "Maya" })).toBeVisible();
   await expect(page.getByRole("region", { name: "Recurring" })).toContainText("Music streaming");
-  await expect(page.getByTestId("remind-button")).toBeVisible();
+  // filter(visible): while the page streams, a hidden copy of the streamed chunk can briefly exist.
+  await expect(page.getByTestId("remind-button").filter({ visible: true })).toBeVisible();
   await shot("friend-detail");
 
   await page.goto("/activity");
   await expect(page.getByRole("heading", { level: 1, name: "Activity" })).toBeVisible();
   await shot("activity");
+
+  // Search and filters on Activity.
+  await page.getByRole("button", { name: "Filters", exact: true }).click();
+  sheet = dialog(page, "Filters");
+  await sheet.getByLabel("Category").selectOption({ label: "Entertainment" });
+  await sheet.getByRole("radio", { name: "You" }).click();
+  await shot("activity-filters", { fullPage: false });
+  await sheet.getByRole("button", { name: "Show results" }).click();
+  await expect(sheet).toBeHidden();
+  await page.getByRole("searchbox", { name: "Search expenses" }).fill("ti");
+  await expect(page.getByRole("region", { name: "Search results" }).getByRole("status")).toHaveText(/^\d+ expenses?$/);
+  await shot("activity-search-results");
+
+  // Spending insights.
+  await page.goto("/insights");
+  await expect(page.getByRole("heading", { level: 1, name: "Your spending" })).toBeVisible();
+  await shot("insights");
+  await page.goto("/insights?months=12");
+  await expect(page.getByRole("radiogroup", { name: "Your share by month" }).getByRole("radio")).toHaveCount(12);
+  await shot("insights-12-months");
+  await page.goto(`${new URL(groupUrl).pathname}/insights`);
+  await expect(page.getByRole("heading", { level: 1, name: "Group spending" })).toBeVisible();
+  await shot("group-insights");
+
+  // Comments on an expense.
+  await page.goto(surfUrl);
+  await expect(page.getByRole("region", { name: "Comments" })).toContainText("wetsuit hire");
+  await page.getByRole("heading", { level: 2, name: "Comments" }).scrollIntoViewIfNeeded();
+  await shot("expense-comments", { fullPage: false });
+
+  // Group settings: the emoji picker.
+  await page.goto(groupUrl);
+  await page.getByRole("button", { name: "Group settings" }).click();
+  sheet = dialog(page, "Group settings");
+  await sheet.getByRole("group", { name: "Emoji" }).scrollIntoViewIfNeeded();
+  await shot("group-settings-emoji", { fullPage: false });
+  await page.keyboard.press("Escape");
+  await expect(sheet).toBeHidden();
 
   await page.goto("/account");
   await expect(page.getByRole("heading", { level: 1, name: "Account" })).toBeVisible();
@@ -296,6 +366,40 @@ test("capture every screen", async ({ page, browser }, info) => {
   await expectToast(page, "Priya invited");
   await expect(page.getByText("You and Priya (invited)")).toBeVisible();
   await shot("group-with-invited");
+
+  // Archive the (settled) book club: read-only page, and the groups list's Archived section.
+  await page.getByRole("button", { name: "Group settings" }).click();
+  sheet = dialog(page, "Group settings");
+  await sheet.getByRole("button", { name: "Archive group" }).click();
+  await page.getByRole("alertdialog").getByRole("button", { name: "Archive group" }).click();
+  await expectToast(page, "Group archived");
+  await expect(page.getByRole("region", { name: "Archived group" })).toBeVisible();
+  await shot("archived-group");
+  await page.goto("/groups");
+  await page.getByText("Archived (1)").click();
+  await expect(page.getByRole("list", { name: "Archived groups" })).toContainText("Book club");
+  await shot("groups-archived");
+
+  // Offline: the indicator, a queued expense, and the offline page.
+  await page.goto(groupUrl);
+  await page.evaluate(() => navigator.serviceWorker.ready.then(() => undefined));
+  await expect.poll(() => page.evaluate(async () => Boolean(navigator.serviceWorker.controller && (await caches.match("/offline")))), { timeout: 15_000 }).toBe(true);
+  await page.context().setOffline(true);
+  await expect(page.getByTestId("offline-indicator")).toContainText("You're offline.");
+  await shot("offline-indicator", { fullPage: false });
+  await shellAddExpense(page).click();
+  sheet = expenseSheet(page);
+  await fillExpense(sheet, { amount: "14.50", description: "Ginjinha round" });
+  await sheet.getByRole("button", { name: "Save expense" }).click();
+  await expect(sheet).toBeHidden();
+  await expect(page.getByTestId("offline-indicator")).toContainText("1 expense waiting to sync");
+  await shot("offline-waiting", { fullPage: false });
+  await page.goto("/friends");
+  await expect(page.getByRole("heading", { level: 1, name: "You're offline" })).toBeVisible();
+  await page.screenshot({ path: `${dir}/${String(++n).padStart(2, "0")}-offline-page.png`, animations: "disabled", style: SHOT_STYLE });
+  await page.context().setOffline(false);
+  await expect(page.getByRole("heading", { level: 1, name: "Friends" })).toBeVisible({ timeout: 15_000 });
+  await expectToast(page, "Added 'Ginjinha round'");
 
   // --- Signed out: join link and claim page ------------------------------------------------
   {
@@ -334,5 +438,14 @@ test("capture every screen", async ({ page, browser }, info) => {
   await page.goto(groupUrl);
   await expect(page.getByRole("heading", { level: 1, name: "Lisbon trip" })).toBeVisible();
   await shot("group-detail-dark");
+  await page.goto("/insights");
+  await expect(page.getByRole("heading", { level: 1, name: "Your spending" })).toBeVisible();
+  await shot("insights-dark");
+  await page.goto(`${new URL(groupUrl).pathname}/insights`);
+  await expect(page.getByRole("heading", { level: 1, name: "Group spending" })).toBeVisible();
+  await shot("group-insights-dark");
+  await page.goto("/activity?q=ti&category=entertainment");
+  await expect(page.getByRole("region", { name: "Search results" }).getByRole("status")).toHaveText(/^\d+ expenses?$/);
+  await shot("activity-search-dark");
   await page.evaluate(() => localStorage.removeItem("bs-theme"));
 });

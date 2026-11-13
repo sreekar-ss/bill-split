@@ -14,7 +14,16 @@ type Recurring = NonNullable<ExpenseDetail["recurring"]>;
 const BUSY = "aria-disabled:cursor-default aria-disabled:opacity-60";
 
 /** The "Repeats" row on the expense page: the schedule, what happens next, and its controls. */
-export function ExpenseRecurring({ recurring, description }: { recurring: Recurring; description: string }) {
+export function ExpenseRecurring({
+  recurring,
+  description,
+  readOnly = false,
+}: {
+  recurring: Recurring;
+  description: string;
+  /** Archived group: show the schedule, without pause, resume or stop. */
+  readOnly?: boolean;
+}) {
   const { pending, working, pause, resume, stop } = useRecurringActions(recurring.id);
   const [confirming, setConfirming] = useState(false);
 
@@ -42,7 +51,7 @@ export function ExpenseRecurring({ recurring, description }: { recurring: Recurr
       </>
     );
 
-  const manageable = state !== "stopped" && !ended;
+  const manageable = state !== "stopped" && !ended && !readOnly;
 
   return (
     <div className="mt-4 border-t border-rule pt-4" aria-busy={pending || undefined}>

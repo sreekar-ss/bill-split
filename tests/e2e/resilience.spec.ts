@@ -30,21 +30,27 @@ test.describe("resilience and focus", () => {
   });
 
   test("a save that can't reach the server keeps the form and says so", async ({ page, browser }, info) => {
+    // New expenses wait on the device when offline (tests/e2e/offline.spec.ts); edits need the server.
     await setupGroup(page, browser, info, "Allotment", "Ana", "Ben");
-    await shellAddExpense(page).click();
+    await addExpense(page, { amount: "30", description: "Seeds" });
+    await page.getByRole("link").filter({ hasText: "Seeds" }).first().click();
+    await expect(page.getByRole("heading", { level: 1, name: "Seeds" })).toBeVisible();
+    await page.getByRole("button", { name: "Edit" }).click();
     const sheet = expenseSheet(page);
-    await fillExpense(sheet, { amount: "30", description: "Seeds" });
+    await expect(sheet.getByRole("heading", { name: "Edit expense" })).toBeVisible();
+    await sheet.getByLabel("Description").fill("Seeds and compost");
 
     await page.context().setOffline(true);
     await sheet.getByRole("button", { name: "Save expense" }).click();
     await expect(sheet.getByRole("alert")).toHaveText("Couldn't reach BillSplit. Check your connection and try again.");
-    await expect(sheet.getByLabel("Description")).toHaveValue("Seeds");
+    await expect(sheet.getByLabel("Description")).toHaveValue("Seeds and compost");
     await expect(page.getByRole("heading", { name: "This page didn't load" })).toHaveCount(0);
 
     await page.context().setOffline(false);
     await sheet.getByRole("button", { name: "Save expense" }).click();
     await expectToast(page, "Expense saved");
     await expect(sheet).toBeHidden();
+    await expect(page.getByRole("heading", { level: 1, name: "Seeds and compost" })).toBeVisible();
   });
 
   test("a sheet form moves focus to the field that needs fixing", async ({ page, browser }, info) => {

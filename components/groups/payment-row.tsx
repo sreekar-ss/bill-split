@@ -23,6 +23,7 @@ export function PaymentRow({
   date,
   amountCents,
   currency,
+  readOnly = false,
 }: {
   id: string;
   /** e.g. "Dev paid you" */
@@ -31,6 +32,8 @@ export function PaymentRow({
   date: Date | string;
   amountCents: number;
   currency: string;
+  /** Archived group: the details open, without Delete payment. */
+  readOnly?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [confirming, setConfirming] = useState(false);
@@ -67,17 +70,19 @@ export function PaymentRow({
         title="Payment"
         description={`${title} ${amount}`}
         footer={
-          <Button
-            variant="destructive"
-            className="w-full"
-            onClick={() => {
-              setError(null);
-              setConfirming(true);
-            }}
-          >
-            <Trash2 aria-hidden />
-            Delete payment
-          </Button>
+          readOnly ? undefined : (
+            <Button
+              variant="destructive"
+              className="w-full"
+              onClick={() => {
+                setError(null);
+                setConfirming(true);
+              }}
+            >
+              <Trash2 aria-hidden />
+              Delete payment
+            </Button>
+          )
         }
       >
         <dl className="divide-y divide-rule border-y border-rule">

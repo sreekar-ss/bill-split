@@ -15,18 +15,20 @@ import { STOP_CONFIRM, useRecurringActions } from "./use-recurring-actions";
 export interface RecurringListProps {
   /** From listRecurring(userId, { groupId } | { friendId }). Render nothing when empty. */
   items: RecurringSummary[];
+  /** Archived group: list the schedules without their pause, resume and stop menu. */
+  readOnly?: boolean;
 }
 
 /**
  * Schedules that keep adding expenses here, as ledger rows. The caller gives the section its
  * heading (e.g. <Section title="Repeating">). Each row has a menu to pause, resume or stop it.
  */
-export function RecurringList({ items }: RecurringListProps) {
+export function RecurringList({ items, readOnly = false }: RecurringListProps) {
   if (items.length === 0) return null;
   return (
     <ul className="border-t border-rule">
       {items.map((item) => (
-        <RecurringRow key={item.id} item={item} />
+        <RecurringRow key={item.id} item={item} readOnly={readOnly} />
       ))}
     </ul>
   );
@@ -35,7 +37,7 @@ export function RecurringList({ items }: RecurringListProps) {
 const ITEM =
   "flex h-11 cursor-default select-none items-center gap-2.5 rounded-[7px] px-3 text-body-sm font-medium outline-none data-[highlighted]:bg-ink/5 data-[highlighted]:outline-2 data-[highlighted]:-outline-offset-2 data-[highlighted]:outline-focus data-[disabled]:opacity-45 [&_svg]:size-[18px] [&_svg]:shrink-0";
 
-function RecurringRow({ item }: { item: RecurringSummary }) {
+function RecurringRow({ item, readOnly }: { item: RecurringSummary; readOnly: boolean }) {
   const { pending, working, pause, resume, stop } = useRecurringActions(item.id);
   const [confirming, setConfirming] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -81,51 +83,55 @@ function RecurringRow({ item }: { item: RecurringSummary }) {
           )}
         </span>
 
-        {/* aria-disabled (not disabled) while an action runs: the menu hands focus back to this button
-            on close, and a disabled button would drop it to <body>. */}
-        <DropdownMenu.Root modal={false} open={menuOpen} onOpenChange={(open) => setMenuOpen(open && !pending)}>
-          <DropdownMenu.Trigger
-            aria-disabled={pending || undefined}
-            aria-label={`Options for ${item.description}`}
-            className="-mr-2 grid size-11 shrink-0 place-items-center rounded-[10px] text-ink-muted hover:bg-ink/5 hover:text-ink focus-visible:outline-2 focus-visible:outline-focus aria-disabled:cursor-default aria-disabled:opacity-45 data-[state=open]:bg-ink/5"
-          >
-            <Ellipsis className="size-5" aria-hidden />
-          </DropdownMenu.Trigger>
-          <DropdownMenu.Portal>
-            <DropdownMenu.Content
-              align="end"
-              sideOffset={4}
-              collisionPadding={16}
-              onCloseAutoFocus={() => {
-                if (!confirmAfterClose.current) return;
-                confirmAfterClose.current = false;
-                setTimeout(() => setConfirming(true), 0);
-              }}
-              className="z-50 min-w-48 rounded-[10px] border border-rule bg-surface p-1 text-ink shadow-lift"
-            >
-              {item.paused ? (
-                <DropdownMenu.Item className={ITEM} onSelect={() => resume()}>
-                  <Play aria-hidden />
-                  Resume
-                </DropdownMenu.Item>
-              ) : (
-                <DropdownMenu.Item className={ITEM} onSelect={() => pause()}>
-                  <Pause aria-hidden />
-                  Pause
-                </DropdownMenu.Item>
-              )}
-              <DropdownMenu.Item
-                className={cn(ITEM, "text-owe")}
-                onSelect={() => {
-                  confirmAfterClose.current = true;
-                }}
+        {readOnly ? null : (
+          <>
+            {/* aria-disabled (not disabled) while an action runs: the menu hands focus back to this button
+                on close, and a disabled button would drop it to <body>. */}
+            <DropdownMenu.Root modal={false} open={menuOpen} onOpenChange={(open) => setMenuOpen(open && !pending)}>
+              <DropdownMenu.Trigger
+                aria-disabled={pending || undefined}
+                aria-label={`Options for ${item.description}`}
+                className="-mr-2 grid size-11 shrink-0 place-items-center rounded-[10px] text-ink-muted hover:bg-ink/5 hover:text-ink focus-visible:outline-2 focus-visible:outline-focus aria-disabled:cursor-default aria-disabled:opacity-45 data-[state=open]:bg-ink/5"
               >
-                <CircleStop aria-hidden />
-                Stop repeating
-              </DropdownMenu.Item>
-            </DropdownMenu.Content>
-          </DropdownMenu.Portal>
-        </DropdownMenu.Root>
+                <Ellipsis className="size-5" aria-hidden />
+              </DropdownMenu.Trigger>
+              <DropdownMenu.Portal>
+                <DropdownMenu.Content
+                  align="end"
+                  sideOffset={4}
+                  collisionPadding={16}
+                  onCloseAutoFocus={() => {
+                    if (!confirmAfterClose.current) return;
+                    confirmAfterClose.current = false;
+                    setTimeout(() => setConfirming(true), 0);
+                  }}
+                  className="z-50 min-w-48 rounded-[10px] border border-rule bg-surface p-1 text-ink shadow-lift"
+                >
+                  {item.paused ? (
+                    <DropdownMenu.Item className={ITEM} onSelect={() => resume()}>
+                      <Play aria-hidden />
+                      Resume
+                    </DropdownMenu.Item>
+                  ) : (
+                    <DropdownMenu.Item className={ITEM} onSelect={() => pause()}>
+                      <Pause aria-hidden />
+                      Pause
+                    </DropdownMenu.Item>
+                  )}
+                  <DropdownMenu.Item
+                    className={cn(ITEM, "text-owe")}
+                    onSelect={() => {
+                      confirmAfterClose.current = true;
+                    }}
+                  >
+                    <CircleStop aria-hidden />
+                    Stop repeating
+                  </DropdownMenu.Item>
+                </DropdownMenu.Content>
+              </DropdownMenu.Portal>
+            </DropdownMenu.Root>
+          </>
+        )}
       </div>
 
       {item.paused && item.lastError ? (

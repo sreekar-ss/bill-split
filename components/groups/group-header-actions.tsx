@@ -9,7 +9,7 @@ import { InviteLinkSheet } from "./invite-link-sheet";
 
 /**
  * Header buttons on the group page: Invite with a link and Add member (icons on phones, labelled
- * from md) and Group settings.
+ * from md; hidden while the group is archived) and Group settings.
  */
 export function GroupHeaderActions({ group, meId }: { group: GroupSettingsData; meId: string }) {
   const [adding, setAdding] = useState(false);
@@ -17,14 +17,19 @@ export function GroupHeaderActions({ group, meId }: { group: GroupSettingsData; 
   const [settings, setSettings] = useState(false);
   return (
     <>
-      <Button variant="secondary" className="w-11 px-0 md:w-auto md:px-4" onClick={() => setInviting(true)}>
-        <Link2 aria-hidden />
-        <span className="sr-only md:not-sr-only">Invite with a link</span>
-      </Button>
-      <Button variant="secondary" className="w-11 px-0 md:w-auto md:px-4" onClick={() => setAdding(true)}>
-        <UserPlus aria-hidden />
-        <span className="sr-only md:not-sr-only">Add member</span>
-      </Button>
+      {/* An archived group is read-only: nobody joins or is added until it's unarchived. */}
+      {group.archived ? null : (
+        <>
+          <Button variant="secondary" className="w-11 px-0 md:w-auto md:px-4" onClick={() => setInviting(true)}>
+            <Link2 aria-hidden />
+            <span className="sr-only md:not-sr-only">Invite with a link</span>
+          </Button>
+          <Button variant="secondary" className="w-11 px-0 md:w-auto md:px-4" onClick={() => setAdding(true)}>
+            <UserPlus aria-hidden />
+            <span className="sr-only md:not-sr-only">Add member</span>
+          </Button>
+        </>
+      )}
       <Button variant="ghost" size="icon" aria-label="Group settings" onClick={() => setSettings(true)}>
         <Settings aria-hidden />
       </Button>

@@ -61,14 +61,22 @@ export async function notifyCommentAdded(commentId: string) {
         text: true,
         userId: true,
         user: { select: { name: true, status: true } },
-        expense: { select: { id: true, description: true, paidById: true, splits: { select: { userId: true, amountCents: true } } } },
+        expense: { select: { id: true, description: true, groupId: true, paidById: true, splits: { select: { userId: true, amountCents: true } } } },
       },
     });
     if (!c) return;
     const ids = new Set([c.expense.paidById, ...c.expense.splits.filter((s) => s.amountCents > 0).map((s) => s.userId)]);
     ids.delete(c.userId);
+    // Only people who can still open the expense: someone who left or was removed from the group
+    // keeps their old split rows but must not receive the comment text.
+    const groupId = c.expense.groupId;
     const recipients = await db.user.findMany({
-      where: { id: { in: [...ids] }, status: "active", notifyExpenses: true },
+      where: {
+        id: { in: [...ids] },
+        status: "active",
+        notifyExpenses: true,
+        ...(groupId ? { groupMemberships: { some: { groupId } } } : {}),
+      },
       select: { id: true },
     });
     const body = c.text.length > 120 ? `${c.text.slice(0, 117)}…` : c.text;

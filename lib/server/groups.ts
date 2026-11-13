@@ -268,6 +268,7 @@ export async function addMemberByEmail(userId: string, groupId: string, input: u
 /** Remove a member (or leave, when memberId === userId). Only allowed when their balance is settled. */
 export async function removeMember(userId: string, groupId: string, memberId: string) {
   const me = await assertGroupMember(groupId, userId);
+  await assertNotArchived(groupId);
   const group = await db.group.findUniqueOrThrow({ where: { id: groupId }, select: { createdById: true } });
   const leaving = memberId === userId;
   if (!leaving && me.role !== "admin" && group.createdById !== userId) {

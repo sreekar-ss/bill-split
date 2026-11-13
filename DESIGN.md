@@ -49,7 +49,9 @@ Rules:
 `docs/design/screens.html` contains reference screens for every MVP1 page, in light and dark, with component measurements at the bottom. When the mockups and this file disagree, this file wins.
 
 ## Signature element: the balance beam
-A diverging horizontal bar centred on zero, one row per person. Bars extend right in `--owed` for people who get money back and left in `--owe` for people who owe. The longest bar is scaled to the full half-width. Each row reads e.g. "Ben, gets back $30.00" with the amount right-aligned in tabular figures. It's used on the group page (members' nets) and the dashboard (your net with each person). It is the only "chart" in the app, so don't add other decorative graphics.
+A diverging horizontal bar centred on zero, one row per person. Bars extend right in `--owed` for people who get money back and left in `--owe` for people who owe. The longest bar is scaled to the full half-width. Each row reads e.g. "Ben, gets back $30.00" with the amount right-aligned in tabular figures. It's used on the group page (members' nets) and the dashboard (your net with each person). Apart from the spending charts below, it's the only chart in the app, so don't add other decorative graphics.
+
+**Spending charts** (`/insights`, a group's Spending page, the strip on Home): bars in neutral `--ink` and `--ink-muted` only, never green, crimson or yellow (those mean balances and the add action). Bars are at most 24px wide with 4px rounded ends, on a hairline `--rule` grid. Every value is also given as text (a labelled radio per month, figures on each category or person row), so the bars themselves are hidden from screen readers.
 
 ## Layout & navigation
 ```

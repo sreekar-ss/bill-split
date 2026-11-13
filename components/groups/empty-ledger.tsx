@@ -14,15 +14,22 @@ export function EmptyLedger({
   groupName,
   alone,
   isAdmin = false,
+  archived = false,
 }: {
   groupId: string;
   groupName: string;
   alone: boolean;
   isAdmin?: boolean;
+  /** Archived groups are read-only: nothing to add. */
+  archived?: boolean;
 }) {
   const { openAddExpense } = useAddExpense();
   const [adding, setAdding] = useState(false);
   const [inviting, setInviting] = useState(false);
+
+  if (archived) {
+    return <EmptyState title="No expenses" body="Nothing was recorded in this group before it was archived." />;
+  }
 
   if (alone) {
     return (

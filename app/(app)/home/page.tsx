@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { FeedList, sortByDate } from "@/components/activity/feed";
 import { GroupRows } from "@/components/home/group-rows";
 import { SectionLink } from "@/components/home/section-link";
+import { SpendingEntry } from "@/components/home/spending-entry";
 import { SummaryPanel } from "@/components/home/summary-panel";
 import { Welcome } from "@/components/home/welcome";
 import { BalanceBeam } from "@/components/ui/balance-beam";
@@ -10,6 +11,7 @@ import { requireUser } from "@/lib/auth/session";
 import { getDashboard } from "@/lib/server/activity";
 import { withRecurringFlags } from "@/lib/server/activity-recurring";
 import { listFriends } from "@/lib/server/friends";
+import { getPersonalInsights } from "@/lib/server/insights";
 import { displayName } from "@/lib/utils/person";
 
 export const metadata: Metadata = { title: "Home" };
@@ -19,7 +21,11 @@ const RECENT_LIMIT = 4;
 
 export default async function HomePage() {
   const user = await requireUser();
-  const [dash, friends] = await Promise.all([getDashboard(user.id), listFriends(user.id)]);
+  const [dash, friends, spending] = await Promise.all([
+    getDashboard(user.id),
+    listFriends(user.id),
+    getPersonalInsights(user.id, { months: 6 }),
+  ]);
 
   if (dash.groups.length === 0 && friends.length === 0) {
     return (
@@ -40,6 +46,11 @@ export default async function HomePage() {
   const beams = order
     .map((currency) => ({ currency, people: dash.people.filter((p) => p.currency === currency) }))
     .filter((b) => b.people.length > 0);
+
+  // Archived groups are finished; Home lists the ones still in use (the Groups page has them all).
+  const activeGroups = dash.groups.filter((g) => !g.archived);
+  // Your share this month, default currency first (amounts in different currencies aren't added up).
+  const spends = [...spending.currencies].sort((a, b) => Number(b.currency === dash.currency) - Number(a.currency === dash.currency));
 
   return (
     <div className="max-w-[720px]">
@@ -74,10 +85,19 @@ export default async function HomePage() {
       <Section title="Groups" action={<SectionLink href="/groups">All groups</SectionLink>}>
         {dash.groups.length === 0 ? (
           <p className="text-body-sm text-ink-muted">No groups yet. Start one for a trip, a flat or a regular dinner.</p>
+        ) : activeGroups.length === 0 ? (
+          <p className="text-body-sm text-ink-muted">All your groups are archived. Start a new one for your next trip or shared flat.</p>
         ) : (
-          <GroupRows groups={dash.groups.slice(0, GROUP_LIMIT)} />
+          <GroupRows groups={activeGroups.slice(0, GROUP_LIMIT)} />
         )}
       </Section>
+
+      {/* Hidden until there's something to show; nothing shared in 6 months means an empty page. */}
+      {spends.length > 0 ? (
+        <Section title="Your spending" action={<SectionLink href="/insights">See your spending</SectionLink>}>
+          <SpendingEntry spends={spends} />
+        </Section>
+      ) : null}
 
       <Section title="Recent activity" action={dash.recent.length > 0 ? <SectionLink href="/activity">All activity</SectionLink> : undefined}>
         {recent.length === 0 ? (

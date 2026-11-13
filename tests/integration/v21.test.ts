@@ -5,9 +5,10 @@ import { db } from "@/lib/server/db";
 import { createExpense } from "@/lib/server/expenses";
 import { csvCell, exportGroupCsv } from "@/lib/server/export-csv";
 import { addFriendByEmail } from "@/lib/server/friends";
-import { addMemberByEmail, archiveGroup, createGroup, getExpenseContexts, listGroups, unarchiveGroup, updateGroup } from "@/lib/server/groups";
+import { addMemberByEmail, archiveGroup, createGroup, getExpenseContexts, listGroups, removeMember, unarchiveGroup, updateGroup } from "@/lib/server/groups";
 import { getGroupInsights, getPersonalInsights } from "@/lib/server/insights";
 import { recordPayment } from "@/lib/server/payments";
+import { createRecurringExpense, pauseRecurring, resumeRecurring, runDueRecurring, stopRecurring } from "@/lib/server/recurring";
 import { savePushSubscription, sentPushes } from "@/lib/server/push";
 import { searchExpenses } from "@/lib/server/search";
 import { registerUser } from "@/lib/server/users";
@@ -43,6 +44,25 @@ describe("offline-safe saves (clientId)", () => {
     expect(await db.expense.count({ where: { groupId: g.id } })).toBe(2);
     await expect(createExpense(ben.id, { ...input, paidById: ben.id })).rejects.toMatchObject({ code: "CONFLICT" });
   });
+
+  it("re-sending a repeating expense keeps one schedule, so later occurrences aren't doubled", async () => {
+    const { ana, ben, g } = await pair();
+    const input = { clientId: randomUUID(), groupId: g.id, description: "Rent", amountCents: 9000, paidById: ana.id, date: "2026-11-02", split: split(ana.id, ben.id) };
+    const first = await createRecurringExpense(ana.id, input, { frequency: "weekly" }, "2026-11-02");
+    await expect(createRecurringExpense(ana.id, input, { frequency: "weekly" }, "2026-11-02")).resolves.toEqual(first);
+    const racing = { ...input, clientId: randomUUID(), description: "Water" };
+    const [a, b] = await Promise.all([
+      createRecurringExpense(ana.id, racing, { frequency: "weekly" }, "2026-11-02"),
+      createRecurringExpense(ana.id, racing, { frequency: "weekly" }, "2026-11-02"),
+    ]);
+    expect(a).toEqual(b);
+    expect(await db.recurringExpense.count({ where: { groupId: g.id } })).toBe(2);
+    await runDueRecurring("2026-11-09");
+    expect(await db.expense.count({ where: { groupId: g.id, description: "Rent" } })).toBe(2);
+    expect(await db.expense.count({ where: { groupId: g.id, description: "Water" } })).toBe(2);
+    // runDueRecurring is global: don't leave these schedules running for other test files.
+    await Promise.all([stopRecurring(ana.id, first.recurringId), stopRecurring(ana.id, a.recurringId)]);
+  });
 });
 
 describe("archiving and emoji", () => {
@@ -62,11 +82,33 @@ describe("archiving and emoji", () => {
     ).rejects.toMatchObject({ code: "CONFLICT" });
     await expect(recordPayment(ana.id, { groupId: g.id, fromUserId: ana.id, toUserId: ben.id, amountCents: 1 })).rejects.toMatchObject({ code: "CONFLICT" });
 
+    const { removeMember } = await import("@/lib/server/groups");
+    await expect(removeMember(ana.id, g.id, ben.id)).rejects.toMatchObject({ code: "CONFLICT" }); // read-only while archived
     await unarchiveGroup(ana.id, g.id);
     await expect(
       createExpense(ana.id, { groupId: g.id, description: "Late", amountCents: 100, paidById: ana.id, date: "2026-11-11", split: split(ana.id, ben.id) }),
     ).resolves.toBeTruthy();
     await expect(updateGroup(ana.id, g.id, { name: "Lisbon", icon: "" })).resolves.toMatchObject({ icon: null });
+  });
+});
+
+describe("archived groups and repeating expenses", () => {
+  it("can't pause, resume or stop a schedule while its group is archived", async () => {
+    const { ana, ben, g } = await pair();
+    const r = await createRecurringExpense(
+      ana.id,
+      { groupId: g.id, description: "Gym", amountCents: 2000, paidById: ana.id, date: "2026-11-02", split: split(ana.id, ben.id) },
+      { frequency: "monthly" },
+      "2026-11-02",
+    );
+    await pauseRecurring(ana.id, r.recurringId);
+    await recordPayment(ben.id, { groupId: g.id, fromUserId: ben.id, toUserId: ana.id, amountCents: 1000 });
+    await archiveGroup(ana.id, g.id);
+    await expect(resumeRecurring(ana.id, r.recurringId, "2026-11-13")).rejects.toMatchObject({ code: "CONFLICT" });
+    await expect(stopRecurring(ana.id, r.recurringId)).rejects.toMatchObject({ code: "CONFLICT" });
+    await unarchiveGroup(ana.id, g.id);
+    await expect(resumeRecurring(ana.id, r.recurringId, "2026-11-13")).resolves.toBeUndefined();
+    await stopRecurring(ana.id, r.recurringId); // runDueRecurring in other files is global
   });
 });
 
@@ -90,6 +132,20 @@ describe("comments", () => {
     await expect(deleteComment(ana.id, c.id)).rejects.toMatchObject({ code: "FORBIDDEN" });
     await deleteComment(ben.id, c.id);
     expect(await listComments(ana.id, e.id)).toEqual([]);
+  });
+
+  it("doesn't push comments to someone who has left the group", async () => {
+    const { ana, ben, g } = await pair();
+    const chloe = await user("Chloe");
+    await addMemberByEmail(ana.id, g.id, { email: chloe.email });
+    const e = await createExpense(ana.id, { groupId: g.id, description: "Taxi", amountCents: 3000, paidById: ana.id, date: "2026-11-10", split: split(ana.id, ben.id, chloe.id) });
+    await recordPayment(chloe.id, { groupId: g.id, fromUserId: chloe.id, toUserId: ana.id, amountCents: 1000 });
+    await removeMember(ana.id, g.id, chloe.id);
+    await savePushSubscription(ana.id, { endpoint: `https://push.test/l-ana-${n}`, keys: { p256dh: "B".repeat(87), auth: "A".repeat(22) } });
+    await savePushSubscription(chloe.id, { endpoint: `https://push.test/l-chloe-${n}`, keys: { p256dh: "B".repeat(87), auth: "A".repeat(22) } });
+    const c = await addComment(ben.id, e.id, { text: "Why was Chloe removed?" });
+    await notifyCommentAdded(c.id);
+    expect(sentPushes.map((p) => p.endpoint)).toEqual([`https://push.test/l-ana-${n}`]);
   });
 
   it("limits how fast someone can comment", async () => {

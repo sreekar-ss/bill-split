@@ -2,6 +2,7 @@ import { ChevronLeft } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { cache } from "react";
+import { CommentsSection } from "@/components/comments/comments-section";
 import { categoryLabel } from "@/components/expenses/categories";
 import { ExpenseActions } from "@/components/expenses/expense-actions";
 import { ExpenseRecurring } from "@/components/expenses/expense-recurring";
@@ -13,6 +14,7 @@ import { requireUser } from "@/lib/auth/session";
 import { formatDay } from "@/lib/domain/dates";
 import { formatMoney } from "@/lib/domain/money";
 import type { SplitMethod } from "@/lib/domain/splits";
+import { isExpenseArchived } from "@/lib/server/expense-archived";
 import { getExpense, type ExpenseDetail } from "@/lib/server/expenses";
 import { orNotFound } from "@/lib/server/page";
 import { cn } from "@/lib/utils/cn";
@@ -23,7 +25,9 @@ type Props = { params: Promise<{ id: string }> };
 // One query per request, shared by the metadata and the page.
 const loadExpense = cache(async (id: string) => {
   const user = await requireUser();
-  return { user, expense: await orNotFound(getExpense(user.id, id)) };
+  // The layout has already checked access; the archived flag is only a boolean, so fetch both at once.
+  const [expense, archived] = await Promise.all([orNotFound(getExpense(user.id, id)), isExpenseArchived(id)]);
+  return { user, expense, archived };
 });
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
@@ -54,7 +58,7 @@ function contextOf(e: ExpenseDetail) {
 
 export default async function ExpensePage({ params }: Props) {
   const { id } = await params;
-  const { user, expense: e } = await loadExpense(id);
+  const { user, expense: e, archived } = await loadExpense(id);
   const ctx = contextOf(e);
 
   const nameOf = (person: { id: string; name: string; status?: string | null }) => (person.id === user.id ? "You" : displayName(person));
@@ -136,12 +140,22 @@ export default async function ExpensePage({ params }: Props) {
           </div>
         </dl>
 
-        {e.recurring ? <ExpenseRecurring recurring={e.recurring} description={e.description} /> : null}
+        {e.recurring ? <ExpenseRecurring recurring={e.recurring} description={e.description} readOnly={archived} /> : null}
       </Panel>
 
-      <div className="mt-4">
-        <ExpenseActions expense={e} backHref={ctx.href} />
-      </div>
+      {archived ? (
+        <p className="mt-4 rounded-[10px] border border-rule px-3 py-2.5 text-body-sm text-ink-muted">
+          This group is archived. Unarchive it on the{" "}
+          <Link href={ctx.href} className="font-medium text-ink underline decoration-rule underline-offset-4 hover:decoration-ink">
+            group page
+          </Link>{" "}
+          to edit this expense.
+        </p>
+      ) : (
+        <div className="mt-4">
+          <ExpenseActions expense={e} backHref={ctx.href} />
+        </div>
+      )}
 
       <Section title="Shares" className="mt-8">
         <ul>
@@ -198,6 +212,8 @@ export default async function ExpensePage({ params }: Props) {
           </>
         ) : null}
       </p>
+
+      <CommentsSection expenseId={e.id} me={{ id: user.id, name: user.name }} archived={archived} groupHref={ctx.href} />
     </div>
   );
 }

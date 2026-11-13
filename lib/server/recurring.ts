@@ -6,6 +6,7 @@ import { db } from "./db";
 import { AppError, notFound } from "./errors";
 import { createExpense } from "./expenses";
 import { areFriends } from "./friends";
+import { assertNotArchived } from "./groups";
 import { notifyExpenseCreated } from "./notifications";
 import { parse } from "./parse";
 
@@ -37,10 +38,14 @@ export async function createRecurringExpense(
   }
 
   // Validate + create the first occurrence through the normal path (authorization, split math).
+  // With a clientId this is idempotent: a re-send after a lost response returns the saved expense.
   const first = await createExpense(userId, data);
-  const expense = await db.expense.findUniqueOrThrow({ where: { id: first.id }, select: { currency: true } });
+  const expense = await db.expense.findUniqueOrThrow({ where: { id: first.id }, select: { currency: true, recurringId: true } });
+  // Already made repeating by an earlier send of this same form: never add a second schedule.
+  if (expense.recurringId) return { expenseId: first.id, recurringId: expense.recurringId, groupId: first.groupId };
 
-  const recurring = await db.recurringExpense.create({
+  const created = await db.$transaction(async (tx) => {
+    const recurring = await tx.recurringExpense.create({
     data: {
       createdById: userId,
       groupId: data.groupId ?? null,
@@ -61,10 +66,23 @@ export async function createRecurringExpense(
       lastRunOn: fromDateInput(data.date),
     },
     select: { id: true },
+    });
+    // Only link if no concurrent send of the same form linked it first; otherwise roll back.
+    const { count } = await tx.expense.updateMany({
+      where: { id: first.id, recurringId: null },
+      data: { recurringId: recurring.id, recurrenceKey: `${recurring.id}:${data.date}` },
+    });
+    if (count !== 1) throw LOST_RACE;
+    return recurring.id;
+  }).catch(async (error) => {
+    if (error !== LOST_RACE) throw error;
+    const winner = await db.expense.findUniqueOrThrow({ where: { id: first.id }, select: { recurringId: true } });
+    return winner.recurringId!;
   });
-  await db.expense.update({ where: { id: first.id }, data: { recurringId: recurring.id, recurrenceKey: `${recurring.id}:${data.date}` } });
-  return { expenseId: first.id, recurringId: recurring.id, groupId: first.groupId };
+  return { expenseId: first.id, recurringId: created, groupId: first.groupId };
 }
+/** Thrown inside the transaction to roll back a schedule that a concurrent identical send beat. */
+const LOST_RACE = new Error("recurring: lost clientId race");
 
 /** Who may see/manage a schedule: group members, or either person in a direct one. */
 async function loadManageable(userId: string, id: string) {
@@ -72,6 +90,8 @@ async function loadManageable(userId: string, id: string) {
   if (!r) throw notFound("recurring expense");
   const ok = r.group ? r.group.members.some((m) => m.userId === userId) : r.createdById === userId || r.friendId === userId;
   if (!ok) throw notFound("recurring expense");
+  // Archived groups are read-only, schedules included (no resuming one until it's unarchived).
+  if (r.groupId) await assertNotArchived(r.groupId);
   return r;
 }
 

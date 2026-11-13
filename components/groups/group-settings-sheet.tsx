@@ -1,13 +1,13 @@
 "use client";
 
-import { LogOut, Trash2 } from "lucide-react";
+import { Archive, ArchiveRestore, Download, LogOut, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
-import { deleteGroupAction, removeMemberAction, updateGroupAction } from "@/app/actions/groups";
+import { archiveGroupAction, deleteGroupAction, removeMemberAction, updateGroupAction } from "@/app/actions/groups";
 import { useFocusFirstError } from "@/components/auth/use-focus-first-error";
 import { Avatar } from "@/components/ui/avatar";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Field, FormError, Input, Select } from "@/components/ui/field";
 import { Sheet } from "@/components/ui/sheet";
@@ -15,6 +15,8 @@ import { formatMoney, SUPPORTED_CURRENCIES } from "@/lib/domain/money";
 import { cn } from "@/lib/utils/cn";
 import { displayName, isInvited, type PersonStatus } from "@/lib/utils/person";
 import { AddMemberForm } from "./add-member-form";
+import { useUnarchive } from "./archive-controls";
+import { EmojiPicker } from "./emoji-picker";
 import { avatarName } from "./format";
 import { runAction } from "@/lib/client/run-action";
 
@@ -22,6 +24,10 @@ export interface GroupSettingsData {
   id: string;
   name: string;
   currency: string;
+  /** The group's emoji, or null for initials. */
+  icon: string | null;
+  /** Archived groups are read-only: no members added or removed, no expenses or payments. */
+  archived: boolean;
   isAdmin: boolean;
   /** True once the group has expenses or payments: the currency can't change after that. */
   currencyLocked: boolean;
@@ -34,6 +40,7 @@ type Confirm =
   | { kind: "remove"; member: { id: string; name: string; invited: boolean } }
   | { kind: "leave" }
   | { kind: "delete" }
+  | { kind: "archive" }
   | null;
 
 export function GroupSettingsSheet({
@@ -51,7 +58,7 @@ export function GroupSettingsSheet({
     <Sheet open={open} onOpenChange={onOpenChange} title="Group settings" description={group.name}>
       <div className="space-y-8 pb-2">
         <DetailsForm group={group} />
-        <MembersSection group={group} meId={meId} onLeft={() => onOpenChange(false)} />
+        <MembersSection group={group} meId={meId} onClose={() => onOpenChange(false)} />
       </div>
     </Sheet>
   );
@@ -64,12 +71,13 @@ function SubHeading({ children }: { children: React.ReactNode }) {
 function DetailsForm({ group }: { group: GroupSettingsData }) {
   const [name, setName] = useState(group.name);
   const [currency, setCurrency] = useState(group.currency);
+  const [icon, setIcon] = useState(group.icon ?? "");
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [formError, setFormError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
   const [failures, setFailures] = useState(0);
   const formRef = useFocusFirstError(failures);
-  const dirty = name.trim() !== group.name || currency !== group.currency;
+  const dirty = name.trim() !== group.name || currency !== group.currency || icon !== (group.icon ?? "");
 
   function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -81,13 +89,14 @@ function DetailsForm({ group }: { group: GroupSettingsData }) {
     }
     setErrors({});
     startTransition(async () => {
-      const res = await runAction(() => updateGroupAction(group.id, { name: name.trim(), ...(group.currencyLocked ? {} : { currency }) }));
+      const res = await runAction(() => updateGroupAction(group.id, { name: name.trim(), icon, ...(group.currencyLocked ? {} : { currency }) }));
       if (res.ok) {
         toast.success("Changes saved");
       } else {
         const fe = res.fieldErrors ?? {};
         setErrors(fe);
-        setFormError(fe.name || fe.currency ? null : res.error);
+        // An emoji error has no field of its own to sit on: it shows above the form.
+        setFormError(fe.name || fe.currency ? null : (fe.icon ?? res.error));
         setFailures((n) => n + 1);
       }
     });
@@ -122,6 +131,7 @@ function DetailsForm({ group }: { group: GroupSettingsData }) {
             </Select>
           )}
         </Field>
+        <EmojiPicker value={icon} onChange={setIcon} disabled={pending} />
         <Button type="submit" variant="secondary" disabled={pending || !dirty}>
           {pending ? "Saving…" : "Save changes"}
         </Button>
@@ -136,11 +146,12 @@ function memberBalance(cents: number, currency: string) {
   return { text: "settled up", cls: "text-ink-muted" };
 }
 
-function MembersSection({ group, meId, onLeft }: { group: GroupSettingsData; meId: string; onLeft: () => void }) {
+function MembersSection({ group, meId, onClose }: { group: GroupSettingsData; meId: string; onClose: () => void }) {
   const router = useRouter();
   const [confirm, setConfirm] = useState<Confirm>(null);
   const [confirmError, setConfirmError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+  const { unarchive, pending: unarchiving } = useUnarchive(group.id, onClose);
 
   const openConfirm = (c: Confirm) => {
     setConfirmError(null);
@@ -162,14 +173,22 @@ function MembersSection({ group, meId, onLeft }: { group: GroupSettingsData; meI
         if (!res.ok) return setConfirmError(res.error);
         toast.success("You left the group");
         setConfirm(null);
-        onLeft();
+        onClose();
         router.replace("/groups");
+      } else if (current.kind === "archive") {
+        // Only offered when settled; if a balance opened up since the page loaded, the service's own
+        // copy ("Settle up everyone's balance…") is shown in the dialog.
+        const res = await runAction(() => archiveGroupAction(group.id));
+        if (!res.ok) return setConfirmError(res.error);
+        toast.success("Group archived", { description: "It's read-only now, under Archived in your groups." });
+        setConfirm(null);
+        onClose();
       } else {
         const res = await runAction(() => deleteGroupAction(group.id));
         if (!res.ok) return setConfirmError(res.error);
         toast.success("Group deleted");
         setConfirm(null);
-        onLeft();
+        onClose();
         router.replace("/groups");
       }
     });
@@ -190,7 +209,13 @@ function MembersSection({ group, meId, onLeft }: { group: GroupSettingsData; meI
             body: "You'll stop seeing this group. You can leave once your balance here is settled up.",
             label: "Leave group",
           }
-        : {
+        : confirm?.kind === "archive"
+          ? {
+              title: `Archive ${group.name}?`,
+              body: "It moves to Archived at the bottom of the groups list, for everyone in it. Nobody can add or change expenses or payments until someone unarchives it.",
+              label: "Archive group",
+            }
+          : {
             title: `Delete ${group.name}?`,
             body: group.settled
               ? "This deletes the group and all of its expenses and payments, for everyone in it. It can't be undone."
@@ -225,7 +250,7 @@ function MembersSection({ group, meId, onLeft }: { group: GroupSettingsData; meI
                   )}
                   <span className={cn("block text-meta", bal.cls)}>{bal.text}</span>
                 </span>
-                {group.isAdmin && !isMe ? (
+                {group.isAdmin && !isMe && !group.archived ? (
                   <Button
                     variant="destructive"
                     size="sm"
@@ -240,9 +265,66 @@ function MembersSection({ group, meId, onLeft }: { group: GroupSettingsData; meI
             );
           })}
         </ul>
-        <div className="mt-5">
-          <AddMemberForm groupId={group.id} />
-        </div>
+        {group.archived ? (
+          <p className="mt-4 text-body-sm text-ink-muted">Members can&apos;t be added or removed while the group is archived.</p>
+        ) : (
+          <div className="mt-5">
+            <AddMemberForm groupId={group.id} />
+          </div>
+        )}
+      </section>
+
+      <section aria-labelledby="group-export-h" className="border-t border-rule pt-6">
+        <SubHeading>
+          <span id="group-export-h">Export</span>
+        </SubHeading>
+        <p className="text-body-sm text-ink-muted">Download every expense and payment in this group as a spreadsheet (CSV).</p>
+        <a href={`/api/groups/${group.id}/export`} download className={cn(buttonVariants({ variant: "secondary" }), "mt-3")}>
+          <Download aria-hidden />
+          Export CSV
+        </a>
+      </section>
+
+      <section aria-labelledby="group-archive-h" className="border-t border-rule pt-6">
+        <SubHeading>
+          <span id="group-archive-h">{group.archived ? "Archived" : "Archive"}</span>
+        </SubHeading>
+        {group.archived ? (
+          <>
+            <p className="text-body-sm text-ink-muted">This group is read-only. Unarchive it to add expenses and payments again.</p>
+            <Button
+              variant="secondary"
+              className="mt-3 aria-disabled:opacity-45"
+              aria-disabled={unarchiving || undefined}
+              onClick={() => !unarchiving && unarchive()}
+            >
+              <ArchiveRestore aria-hidden />
+              {unarchiving ? "Unarchiving…" : "Unarchive group"}
+            </Button>
+          </>
+        ) : (
+          <>
+            <p className="text-body-sm text-ink-muted">
+              Finished with this group? Archiving hides it under Archived in the groups list and makes it read-only. Everyone needs to be settled up first.
+            </p>
+            {/* An open balance would make the server refuse: don't offer a step that can't succeed. */}
+            <Button
+              variant="secondary"
+              className="mt-3"
+              disabled={!group.settled}
+              aria-describedby={group.settled ? undefined : "group-archive-blocked"}
+              onClick={() => openConfirm({ kind: "archive" })}
+            >
+              <Archive aria-hidden />
+              Archive group
+            </Button>
+            {group.settled ? null : (
+              <p id="group-archive-blocked" className="mt-2 text-body-sm text-ink">
+                Settle up everyone first. Then you can archive the group.
+              </p>
+            )}
+          </>
+        )}
       </section>
 
       <section aria-labelledby="group-leave-h" className="border-t border-rule pt-6">
@@ -282,6 +364,7 @@ function MembersSection({ group, meId, onLeft }: { group: GroupSettingsData; meI
         confirmLabel={dialog.label}
         onConfirm={runConfirm}
         pending={pending}
+        tone={confirm?.kind === "archive" ? "neutral" : "danger"}
       />
     </>
   );

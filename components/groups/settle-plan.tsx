@@ -25,6 +25,7 @@ export function SettlePlan({
   meId,
   currency,
   paymentNote,
+  readOnly = false,
 }: {
   groupId: string;
   plan: PlanStep[];
@@ -37,10 +38,12 @@ export function SettlePlan({
   currency: string;
   /** Prefilled note in the payee's payment app (the group name). */
   paymentNote?: string;
+  /** Archived group: show the plan, with no Record payment or Remind actions. */
+  readOnly?: boolean;
 }) {
   const [sheet, setSheet] = useState<{ open: boolean; prefill: Prefill }>({ open: false, prefill: {} });
   const memberIds = new Set(people.map((p) => p.id));
-  const canRecord = people.length >= 2;
+  const canRecord = people.length >= 2 && !readOnly;
 
   return (
     <>
@@ -55,7 +58,7 @@ export function SettlePlan({
             {plan.map((step) => {
               const toMe = step.to.id === meId;
               const fromMe = step.from.id === meId;
-              const recordable = memberIds.has(step.from.id) && memberIds.has(step.to.id);
+              const recordable = !readOnly && memberIds.has(step.from.id) && memberIds.has(step.to.id);
               // Only the person being paid can nudge the payer. Deleted accounts and invited
               // placeholders have no inbox to remind.
               const remindable = toMe && recordable && step.from.status !== "deleted" && !isInvited(step.from);
@@ -90,7 +93,7 @@ export function SettlePlan({
                     >
                       Record payment
                     </Button>
-                  ) : (
+                  ) : readOnly ? null : (
                     <span className="text-meta text-ink-muted">left the group</span>
                   )}
                 </li>
@@ -104,18 +107,20 @@ export function SettlePlan({
           {plan.length ? "Record a different payment" : "Record a payment"}
         </Button>
       ) : null}
-      <SettleUpSheet
-        open={sheet.open}
-        onOpenChange={(open) => setSheet((s) => ({ ...s, open }))}
-        context={{ groupId }}
-        people={people}
-        meId={meId}
-        currency={currency}
-        defaultFromId={sheet.prefill.fromId}
-        defaultToId={sheet.prefill.toId}
-        defaultAmountCents={sheet.prefill.amountCents}
-        paymentNote={paymentNote}
-      />
+      {readOnly ? null : (
+        <SettleUpSheet
+          open={sheet.open}
+          onOpenChange={(open) => setSheet((s) => ({ ...s, open }))}
+          context={{ groupId }}
+          people={people}
+          meId={meId}
+          currency={currency}
+          defaultFromId={sheet.prefill.fromId}
+          defaultToId={sheet.prefill.toId}
+          defaultAmountCents={sheet.prefill.amountCents}
+          paymentNote={paymentNote}
+        />
+      )}
     </>
   );
 }

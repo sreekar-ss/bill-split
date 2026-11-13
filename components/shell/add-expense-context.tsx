@@ -1,11 +1,14 @@
 "use client";
 
 import { createContext, useContext } from "react";
+import type { QueuedExpense } from "@/lib/pwa/offline-queue";
 import type { ExpenseDetail } from "@/lib/server/expenses";
 
 export interface AddExpensePreset {
   groupId?: string;
   friendId?: string;
+  /** Reopen an expense saved on this device (one the server refused), to fix and save it. */
+  draft?: QueuedExpense;
 }
 
 export interface AddExpenseApi {

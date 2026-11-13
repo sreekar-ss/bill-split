@@ -17,7 +17,11 @@ export function GroupLedger({ group, meId }: { group: GroupDetail; meId: string 
     ...group.payments.map((p) => ({ kind: "payment" as const, at: new Date(p.date), created: new Date(p.createdAt), payment: p })),
   ].sort((a, b) => b.at.getTime() - a.at.getTime() || b.created.getTime() - a.created.getTime());
 
-  if (entries.length === 0) return <EmptyLedger groupId={group.id} groupName={group.name} alone={group.members.length < 2} isAdmin={group.isAdmin} />;
+  if (entries.length === 0) {
+    return (
+      <EmptyLedger groupId={group.id} groupName={group.name} alone={group.members.length < 2} isAdmin={group.isAdmin} archived={group.archived} />
+    );
+  }
 
   const months: { label: string; entries: Entry[] }[] = [];
   for (const entry of entries) {
@@ -55,6 +59,7 @@ export function GroupLedger({ group, meId }: { group: GroupDetail; meId: string 
                   date={entry.payment.date}
                   amountCents={entry.payment.amountCents}
                   currency={group.currency}
+                  readOnly={group.archived}
                 />
               ),
             )}

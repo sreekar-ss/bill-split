@@ -4,7 +4,7 @@ import { AlertDialog } from "radix-ui";
 import { Button } from "./button";
 import { useReturnFocus } from "./return-focus";
 
-/** Confirmation step for destructive actions. */
+/** Confirmation step for destructive actions (or, with tone "neutral", for undoable ones like archiving). */
 export function ConfirmDialog({
   open,
   onOpenChange,
@@ -13,6 +13,7 @@ export function ConfirmDialog({
   confirmLabel,
   onConfirm,
   pending,
+  tone = "danger",
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -21,6 +22,8 @@ export function ConfirmDialog({
   confirmLabel: string;
   onConfirm: () => void;
   pending?: boolean;
+  /** "danger" fills the confirm button with --owe; "neutral" uses the primary ink button. */
+  tone?: "danger" | "neutral";
 }) {
   const onCloseAutoFocus = useReturnFocus(open);
   return (
@@ -37,7 +40,7 @@ export function ConfirmDialog({
               <Button variant="secondary">Cancel</Button>
             </AlertDialog.Cancel>
             <Button
-              variant="danger"
+              variant={tone === "danger" ? "danger" : "primary"}
               disabled={pending}
               onClick={(e) => {
                 e.preventDefault();

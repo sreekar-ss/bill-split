@@ -51,7 +51,6 @@ model User {
   expenseSplits     ExpenseSplit[]
   paymentsFrom      Settlement[]  @relation("PaymentFrom")
   paymentsTo        Settlement[]  @relation("PaymentTo")
-  notifications     Notification[]
   friends           Friendship[]  @relation("UserFriends")
   friendOf          Friendship[]  @relation("FriendOf")
   comments          Comment[]
@@ -82,7 +81,6 @@ model Group {
   members   GroupMember[]
   expenses  Expense[]
   settlements Settlement[]
-  activities Activity[]
   recurringExpenses RecurringExpense[]
 
   @@index([createdById])
@@ -133,9 +131,7 @@ model Expense {
   recurring RecurringExpense? @relation(fields: [recurringId], references: [id], onDelete: SetNull)
   splits    ExpenseSplit[]
   receipts  Receipt[]
-  items     ExpenseItem[]
   comments  Comment[]
-  activities Activity[]
 
   @@index([groupId])
   @@index([createdById])
@@ -162,22 +158,6 @@ model ExpenseSplit {
   @@unique([expenseId, userId])
   @@index([expenseId])
   @@index([userId])
-}
-
-// Itemized expense items (for detailed splitting)
-model ExpenseItem {
-  id          String   @id @default(cuid())
-  expenseId   String
-  name        String
-  quantity    Int      @default(1)
-  price       Float
-  sharedBy    String[] // Array of user IDs
-  createdAt   DateTime @default(now())
-
-  // Relations
-  expense Expense @relation(fields: [expenseId], references: [id], onDelete: Cascade)
-
-  @@index([expenseId])
 }
 
 // Receipt images
@@ -215,23 +195,11 @@ model Settlement {
   toUser   User   @relation("PaymentTo", fields: [toUserId], references: [id])
   group    Group? @relation(fields: [groupId], references: [id], onDelete: Cascade)
   createdBy User? @relation("SettlementRecorder", fields: [createdById], references: [id], onDelete: SetNull)
-  activities Activity[]
 
   @@index([fromUserId])
   @@index([toUserId])
   @@index([groupId])
   @@index([settledAt])
-}
-
-// Category definitions
-model Category {
-  id          String   @id @default(cuid())
-  name        String   @unique
-  icon        String
-  color       String
-  type        String   @default("expense") // expense, group
-  isDefault   Boolean  @default(false)
-  createdAt   DateTime @default(now())
 }
 
 // Friendship/contacts
@@ -250,45 +218,6 @@ model Friendship {
   @@unique([userId, friendId])
   @@index([userId])
   @@index([friendId])
-}
-
-// Notifications
-model Notification {
-  id        String   @id @default(cuid())
-  userId    String
-  type      String   // expense_added, payment_received, group_invite, etc.
-  title     String
-  message   String
-  data      Json?    // Additional data
-  read      Boolean  @default(false)
-  createdAt DateTime @default(now())
-
-  // Relations
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([userId])
-  @@index([read])
-  @@index([createdAt])
-}
-
-// Activity feed
-model Activity {
-  id          String   @id @default(cuid())
-  groupId     String
-  type        String   // expense_created, expense_updated, settlement_made, etc.
-  description String
-  metadata    Json?
-  expenseId   String?
-  settlementId String?
-  createdAt   DateTime @default(now())
-
-  // Relations
-  group      Group       @relation(fields: [groupId], references: [id], onDelete: Cascade)
-  expense    Expense?    @relation(fields: [expenseId], references: [id], onDelete: Cascade)
-  settlement Settlement? @relation(fields: [settlementId], references: [id], onDelete: Cascade)
-
-  @@index([groupId])
-  @@index([createdAt])
 }
 
 // Comments on expenses

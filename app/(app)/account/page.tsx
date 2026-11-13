@@ -1,5 +1,6 @@
 import { Download } from "lucide-react";
 import type { Metadata } from "next";
+import Link from "next/link";
 import { DeleteAccountButton } from "@/components/account/delete-account";
 import { EmailStatus } from "@/components/account/email-status";
 import { LogoutButton } from "@/components/account/logout-button";
@@ -12,6 +13,8 @@ import { ThemePicker } from "@/components/account/theme-picker";
 import { Avatar } from "@/components/ui/avatar";
 import { buttonVariants } from "@/components/ui/button";
 import { InstallAppSection } from "@/components/pwa/install-app";
+import { PushSettings } from "@/components/pwa/push-settings";
+import { pushPublicKey } from "@/lib/server/push";
 import { PageHeader, Section } from "@/components/ui/page";
 import { requireUser } from "@/lib/auth/session";
 import { getNotificationPrefs } from "@/lib/server/notifications";
@@ -22,6 +25,7 @@ export const metadata: Metadata = { title: "Account" };
 export default async function AccountPage() {
   const user = await requireUser();
   const [profile, prefs] = await Promise.all([getProfile(user.id), getNotificationPrefs(user.id)]);
+  const pushKey = pushPublicKey();
 
   return (
     <div className="max-w-[720px]">
@@ -57,6 +61,11 @@ export default async function AccountPage() {
 
         {/* id: deep link from the /unsubscribe page and emails ("turn them back on in Account"). */}
         <div id="notifications" className="scroll-mt-6">
+          {pushKey ? (
+            <Section title="Push notifications">
+              <PushSettings publicKey={pushKey} />
+            </Section>
+          ) : null}
           <Section title="Email notifications">
             <NotificationSettings
               email={profile.email}
@@ -104,6 +113,10 @@ export default async function AccountPage() {
             <Download aria-hidden />
             Download my data
           </a>
+          <p className="mt-3 text-body-sm text-ink-muted">
+            Read the <Link href="/privacy" className="font-semibold text-ink underline underline-offset-4">privacy policy</Link> and{" "}
+            <Link href="/terms" className="font-semibold text-ink underline underline-offset-4">terms of use</Link>.
+          </p>
         </Section>
 
         <Section title="Delete account" className="mt-10 border-t border-rule pt-6">

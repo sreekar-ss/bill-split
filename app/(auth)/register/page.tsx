@@ -16,6 +16,11 @@ export default async function RegisterPage({ searchParams }: { searchParams: Pro
       <div className="mt-8">
         <RegisterForm next={next} />
       </div>
+      <p className="mt-4 text-meta text-ink-muted">
+        By creating an account you agree to the{" "}
+        <Link href="/terms" className="font-semibold text-ink underline underline-offset-4">terms of use</Link> and{" "}
+        <Link href="/privacy" className="font-semibold text-ink underline underline-offset-4">privacy policy</Link>.
+      </p>
       <p className="mt-6 text-body-sm text-ink-muted">
         Already have an account?{" "}
         <Link href={withNext("/login", next)} className="font-semibold text-ink underline underline-offset-4">

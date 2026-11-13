@@ -176,7 +176,13 @@ export default async function LandingPage({ searchParams }: Props) {
 
       <footer className="mx-auto flex max-w-[1040px] flex-wrap items-center justify-between gap-3 border-t border-rule py-6 text-meta text-ink-muted">
         <span className="font-semibold text-ink">BillSplit</span>
-        <span className="flex gap-5">
+        <span className="flex flex-wrap gap-x-5">
+          <Link href="/privacy" className="inline-flex min-h-11 items-center underline underline-offset-4">
+            Privacy
+          </Link>
+          <Link href="/terms" className="inline-flex min-h-11 items-center underline underline-offset-4">
+            Terms
+          </Link>
           <Link href="/login" className="inline-flex min-h-11 items-center font-semibold text-ink underline underline-offset-4">
             Log in
           </Link>

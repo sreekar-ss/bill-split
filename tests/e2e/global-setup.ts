@@ -8,4 +8,5 @@ export default async function globalSetup() {
   const outbox = resolve("reports/e2e-mail-outbox.jsonl");
   mkdirSync(dirname(outbox), { recursive: true });
   writeFileSync(outbox, "");
+  writeFileSync(resolve("reports/e2e-push-outbox.jsonl"), "");
 }

@@ -47,6 +47,7 @@ model User {
   passwordResetTokens PasswordResetToken[]
   emailTokens       EmailToken[]
   recurringExpenses RecurringExpense[] @relation("RecurringCreator")
+  pushSubscriptions PushSubscription[]
   expenseSplits     ExpenseSplit[]
   paymentsFrom      Settlement[]  @relation("PaymentFrom")
   paymentsTo        Settlement[]  @relation("PaymentTo")
@@ -373,4 +374,21 @@ model RecurringExpense {
   @@index([nextRunOn])
   @@index([groupId])
   @@index([createdById])
+}
+
+// A device that opted in to push notifications (Web Push; iPhone: installed app only).
+model PushSubscription {
+  id            String    @id @default(cuid())
+  userId        String
+  endpoint      String    @unique
+  p256dh        String
+  auth          String
+  userAgent     String?
+  createdAt     DateTime  @default(now())
+  lastSuccessAt DateTime?
+  failures      Int       @default(0)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
 }

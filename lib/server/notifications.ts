@@ -11,6 +11,7 @@ import { AppError } from "./errors";
 import { computeRelations, loadGroupLedger } from "./ledger";
 import { isEmailConfigured, sendEmail } from "./mailer";
 import { parse } from "./parse";
+import { sendPushToUser } from "./push";
 import { hit } from "./rate-limit";
 import { sign, verifySignature } from "./tokens";
 
@@ -79,8 +80,12 @@ type Recipient = { id: string; name: string; email: string; status: string; emai
   Record<(typeof PREF_FIELD)[NotificationType], boolean>
 >;
 
-function canNotify(u: Recipient, type: NotificationType) {
+/** Email needs a confirmed address; push needs only an active account (the device opted in itself). */
+function canEmail(u: Recipient, type: NotificationType) {
   return u.status === "active" && u.emailVerified && u[PREF_FIELD[type]] !== false;
+}
+function canPush(u: Recipient, type: NotificationType) {
+  return u.status === "active" && u[PREF_FIELD[type]] !== false;
 }
 
 async function deliver(email: ReturnType<typeof renderEmail>) {
@@ -128,7 +133,10 @@ export async function notifyExpenseCreated(expenseId: string, actorId: string, o
 
   for (const s of e.splits) {
     const u = s.user;
-    if (u.id === actorId || !canNotify(u, "expenses")) continue;
+    if (u.id === actorId) continue;
+    const email = canEmail(u, "expenses");
+    const push = canPush(u, "expenses");
+    if (!email && !push) continue;
     const stake = stakeInExpense(u.id, ledgerExpense);
     if (stake === 0 && s.amountCents === 0) continue;
     const share = formatMoney(s.amountCents, e.currency);
@@ -138,18 +146,28 @@ export async function notifyExpenseCreated(expenseId: string, actorId: string, o
       : `${actor?.name ?? "Someone"} added ${e.description}${where}.`;
     const effect =
       stake > 0 ? `You get back ${formatMoney(stake, e.currency)}.` : stake < 0 ? `You owe ${formatMoney(-stake, e.currency)}.` : "";
-    await deliver(
-      renderEmail({
-        to: u.email,
-        subject: opts.recurring ? `${e.description}: recurring expense added` : `${actor?.name ?? "Someone"} added ${e.description}`,
-        greeting: `Hi ${u.name},`,
-        paragraphs: [lead, `${payer} ${formatMoney(e.amountCents, e.currency)}. Your share is ${share}. ${effect}`.trim()],
-        button: { label: "View expense", url: `${appUrl()}/expenses/${e.id}` },
-        notes: ["You're getting this because you're part of this expense."],
-        unsubscribeUrl: unsubscribeUrl(u.id, "expenses"),
-        oneClickUrl: oneClickUnsubscribeUrl(u.id, "expenses"),
-      }),
-    );
+    if (email) {
+      await deliver(
+        renderEmail({
+          to: u.email,
+          subject: opts.recurring ? `${e.description}: recurring expense added` : `${actor?.name ?? "Someone"} added ${e.description}`,
+          greeting: `Hi ${u.name},`,
+          paragraphs: [lead, `${payer} ${formatMoney(e.amountCents, e.currency)}. Your share is ${share}. ${effect}`.trim()],
+          button: { label: "View expense", url: `${appUrl()}/expenses/${e.id}` },
+          notes: ["You're getting this because you're part of this expense."],
+          unsubscribeUrl: unsubscribeUrl(u.id, "expenses"),
+          oneClickUrl: oneClickUnsubscribeUrl(u.id, "expenses"),
+        }),
+      );
+    }
+    if (push) {
+      await sendPushToUser(u.id, {
+        title: opts.recurring ? `${e.description} added (recurring)` : `${actor?.name ?? "Someone"} added ${e.description}`,
+        body: `${effect || `Your share is ${share}.`}${where ? ` ${where.trim().replace(/^in /, "In ")}.` : ""}`,
+        url: `/expenses/${e.id}`,
+        tag: `expense-${e.id}`,
+      });
+    }
   }
 }
 
@@ -175,8 +193,18 @@ export async function notifyPaymentRecorded(paymentId: string, actorId: string) 
     [p.toUser, p.fromUser, `${displayName(p.fromUser)} paid you ${amount}${where}.`],
     [p.fromUser, p.toUser, `A payment of ${amount} from you to ${displayName(p.toUser)}${where} was recorded.`],
   ] as const) {
-    if (u.id === actorId || !canNotify(u, "payments")) continue;
-    const link = p.groupId ? `${appUrl()}/groups/${p.groupId}` : `${appUrl()}/friends/${other.id}`;
+    if (u.id === actorId) continue;
+    const path = p.groupId ? `/groups/${p.groupId}` : `/friends/${other.id}`;
+    const link = `${appUrl()}${path}`;
+    if (canPush(u, "payments")) {
+      await sendPushToUser(u.id, {
+        title: u.id === p.toUser.id ? `${displayName(p.fromUser)} paid you ${amount}` : `Payment of ${amount} recorded`,
+        body: line,
+        url: path,
+        tag: `payment-${paymentId}`,
+      });
+    }
+    if (!canEmail(u, "payments")) continue;
     await deliver(
       renderEmail({
         to: u.email,
@@ -241,10 +269,18 @@ export async function sendReminder(fromUserId: string, input: { toUserId: string
     throw new AppError(`You already reminded ${displayName(to)}. You can send another in ${days} day${days === 1 ? "" : "s"}.`, "RATE_LIMITED");
   }
 
-  // Not deliverable: say so honestly, but the cooldown still applies (no spamming retries).
-  if (!canNotify(to, "reminders")) return { delivered: false as const, name: displayName(to) };
-
   const amount = formatMoney(owedCents, currency);
+  const pushed = canPush(to, "reminders")
+    ? await sendPushToUser(to.id, {
+        title: `Reminder from ${from.name}`,
+        body: `You owe ${from.name} ${amount}${where}. Tap to settle up.`,
+        url: link.replace(appUrl(), ""),
+        tag: `reminder-${fromUserId}`,
+      })
+    : 0;
+  // Not deliverable by email: say so honestly unless a push went out; the cooldown still applies.
+  if (!canEmail(to, "reminders")) return { delivered: pushed > 0, name: displayName(to) };
+
   const links = paymentLinks(from, owedCents, currency, `BillSplit${where}`);
   await deliver(
     renderEmail({
@@ -263,7 +299,7 @@ export async function sendReminder(fromUserId: string, input: { toUserId: string
       oneClickUrl: oneClickUnsubscribeUrl(to.id, "reminders"),
     }),
   );
-  return { delivered: true as const, name: displayName(to) };
+  return { delivered: true, name: displayName(to) };
 }
 
 /** "Venmo", "Venmo or PayPal", "Venmo, PayPal or Cash App". */

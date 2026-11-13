@@ -8,6 +8,8 @@ const baseURL = `http://localhost:${PORT}`;
 export const MAIL_OUTBOX = resolve("reports/e2e-mail-outbox.jsonl");
 /** Bearer secret the test server expects on /api/cron/daily (specs call the cron route with it). */
 export const CRON_SECRET = "test-cron-secret";
+/** The test server "sends" push notifications by appending JSON lines here. */
+export const PUSH_OUTBOX = resolve("reports/e2e-push-outbox.jsonl");
 
 /**
  * E2E runs against a production build (`next build` must have run) served by `next start`,
@@ -44,6 +46,8 @@ export default defineConfig({
       // No 60s wait between two emails to the same person, so "Resend link" flows can be tested.
       EMAIL_COOLDOWN_SECONDS: "0",
       CRON_SECRET,
+      PUSH_TRANSPORT: "file",
+      PUSH_OUTBOX,
     },
   },
 });

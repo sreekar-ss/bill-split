@@ -1,9 +1,13 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { SESSION_COOKIE, verifySessionToken } from "@/lib/auth/token";
+import { SESSION_COOKIE, sessionCookieOptions, shouldRefreshSession, signSessionToken, verifySessionToken } from "@/lib/auth/token";
 
 /**
  * Optimistic route guard: checks the session cookie's signature only (no DB). Pages and
  * actions still call requireUser(), which also validates the user's sessionVersion.
+ *
+ * Rolling sessions: a valid session over a day old is re-signed (same user and version) with a
+ * fresh 30-day expiry, so people who use the app at least monthly stay logged in. A stale version
+ * stays stale — logout-everywhere and password changes still end it.
  */
 const APP_PREFIXES = ["/home", "/groups", "/friends", "/activity", "/account", "/expenses"];
 const AUTH_PAGES = ["/login", "/register", "/forgot-password"];
@@ -17,12 +21,16 @@ export async function proxy(request: NextRequest) {
     url.searchParams.set("next", pathname + search);
     return NextResponse.redirect(url);
   }
-  if (session && (AUTH_PAGES.includes(pathname) || pathname === "/")) {
-    return NextResponse.redirect(new URL("/home", request.url));
+  const response =
+    session && (AUTH_PAGES.includes(pathname) || pathname === "/")
+      ? NextResponse.redirect(new URL("/home", request.url))
+      : NextResponse.next();
+  if (session && shouldRefreshSession(session)) {
+    response.cookies.set(SESSION_COOKIE, await signSessionToken({ userId: session.userId, v: session.v }), sessionCookieOptions());
   }
-  return NextResponse.next();
+  return response;
 }
 
 export const config = {
-  matcher: ["/((?!api|_next/static|_next/image|favicon.ico|.*\\.(?:png|svg|jpg|ico|webmanifest)$).*)"],
+  matcher: ["/((?!api|_next/static|_next/image|favicon.ico|.*\\.(?:png|svg|jpg|ico|webmanifest|js|txt)$).*)"],
 };

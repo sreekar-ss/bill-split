@@ -3,7 +3,7 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { cache } from "react";
 import { db } from "@/lib/server/db";
-import { SESSION_COOKIE, SESSION_MAX_AGE_SECONDS, signSessionToken, verifySessionToken } from "./token";
+import { SESSION_COOKIE, sessionCookieOptions, signSessionToken, verifySessionToken } from "./token";
 
 export interface CurrentUser {
   id: string;
@@ -16,13 +16,7 @@ export interface CurrentUser {
 export async function startSession(user: { id: string; sessionVersion: number }) {
   const token = await signSessionToken({ userId: user.id, v: user.sessionVersion });
   const jar = await cookies();
-  jar.set(SESSION_COOKIE, token, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production" && process.env.INSECURE_COOKIES !== "1",
-    sameSite: "lax",
-    path: "/",
-    maxAge: SESSION_MAX_AGE_SECONDS,
-  });
+  jar.set(SESSION_COOKIE, token, sessionCookieOptions());
 }
 
 export async function endSession() {

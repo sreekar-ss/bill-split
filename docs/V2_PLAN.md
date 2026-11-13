@@ -44,7 +44,7 @@ Resend's free plan allows 3,000 emails a month and 100 a day, so email is kept f
 - "Turn on notifications?" prompt: appears ~6s after opening the app when push is supported and permission hasn't been decided. Once per session, never in the same session as the install prompt, and "Not now" hides it for 14 days.
 - "Send a test notification" reports whether the push reached the browser, which separates "the OS is hiding notifications" from "it never arrived".
 
-## Milestone C — travel-ready
+## Milestone C — travel-ready (ON HOLD — the owner will ask when it's needed)
 | Feature | Scope |
 |---|---|
 | Expenses in any currency | Enter an expense in any supported currency. In a group, it's converted to the group's currency at the expense date's European Central Bank rate (Frankfurter API, cached in the database). The original amount and the rate are shown on the expense. Direct expenses can pick their own currency. |

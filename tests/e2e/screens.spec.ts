@@ -4,6 +4,7 @@ import { expect, test } from "./fixtures";
 import {
   addExpense,
   addMember,
+  closeSheet,
   createGroup,
   dialog,
   expectToast,
@@ -110,7 +111,7 @@ test("capture every screen", async ({ page, browser }, info) => {
     await settings.locator("label").filter({ has: page.getByRole("radio", { name: "Plane" }) }).click();
     await settings.getByRole("button", { name: "Save changes" }).click();
     await expectToast(page, "Changes saved");
-    await settings.getByRole("button", { name: "Close" }).click();
+    await closeSheet(settings);
     await expect(settings).toBeHidden();
   }
 

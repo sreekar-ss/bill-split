@@ -103,10 +103,6 @@ export async function removePushSubscription(userId: string, endpoint: string) {
   await db.pushSubscription.deleteMany({ where: { userId, endpoint: String(endpoint).slice(0, 2048) } });
 }
 
-export async function hasPushDevices(userId: string) {
-  return (await db.pushSubscription.count({ where: { userId } })) > 0;
-}
-
 /**
  * Send to every device of a user, in parallel, with a timeout. Only devices registered under the
  * user's current sessionVersion receive anything (older ones are removed). Dead subscriptions

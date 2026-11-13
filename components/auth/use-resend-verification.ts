@@ -6,7 +6,7 @@ import { resendVerificationAction } from "@/app/actions/account";
 import { runAction } from "@/lib/client/run-action";
 
 export const LINK_SENT = "Link sent";
-export const LINK_THROTTLED = "Link already sent — check your inbox, or try again in a minute";
+export const LINK_THROTTLED = "We already sent you a link. Check your inbox and spam folder, or try again later.";
 
 /**
  * Re-sends the signed-in user's verification link and toasts the outcome.

@@ -13,9 +13,9 @@ import { runAction } from "@/lib/client/run-action";
 import type { CommentItem } from "@/lib/server/comments";
 import { cn } from "@/lib/utils/cn";
 import { displayName } from "@/lib/utils/person";
+import { COMMENT_MAX } from "@/lib/validation";
 import { CommentTime } from "./comment-time";
 
-export const COMMENT_MAX = 500;
 /** The character counter appears once this few characters are left. */
 const COUNTER_FROM = 100;
 

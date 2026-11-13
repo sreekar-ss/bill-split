@@ -8,6 +8,7 @@ import { createExpenseAction, updateExpenseAction } from "@/app/actions/expenses
 import type { AddExpensePreset } from "@/components/shell/add-expense-context";
 import { Button } from "@/components/ui/button";
 import { Field, FormError, Input, Select, Textarea } from "@/components/ui/field";
+import { useBackToClose } from "@/components/ui/back-to-close";
 import { Sheet } from "@/components/ui/sheet";
 import { todayInput } from "@/lib/domain/dates";
 import { centsToInput, parseAmountToCents } from "@/lib/domain/money";
@@ -38,8 +39,10 @@ export interface ExpenseSheetProps {
  * (the preset, the expense being edited, or blank).
  */
 export function ExpenseSheet(props: ExpenseSheetProps) {
+  // On phones the form is its own screen, so the back gesture should close it.
+  const onOpenChange = useBackToClose(props.open, props.onOpenChange);
   if (!props.open) return null;
-  return <ExpenseSheetSession {...props} />;
+  return <ExpenseSheetSession {...props} onOpenChange={onOpenChange} />;
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -415,7 +418,7 @@ function ExpenseSheetSession({ onOpenChange, contexts, preset, editing }: Expens
   );
 
   return (
-    <Sheet open onOpenChange={onOpenChange} title={editing ? "Edit expense" : "Add expense"} description={contextLine} footer={footer}>
+    <Sheet screen open onOpenChange={onOpenChange} title={editing ? "Edit expense" : "Add expense"} description={contextLine} footer={footer}>
       <form id={formId} onSubmit={submit} noValidate className="space-y-4" aria-busy={pending || undefined}>
         {!editing ? (
           <Field

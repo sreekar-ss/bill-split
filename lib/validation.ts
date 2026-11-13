@@ -105,7 +105,8 @@ export const groupSchema = z.object({
   icon: emoji.optional(),
 });
 
-export const emailSchema = z.object({ email });
+/** Longest comment on an expense (the server's limit and the composer's counter). */
+export const COMMENT_MAX = 500;
 
 export const expenseSchema = z
   .object({

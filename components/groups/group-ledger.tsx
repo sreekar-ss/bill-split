@@ -1,21 +1,22 @@
 import { Repeat } from "lucide-react";
+import { groupByMonth, sortByDate } from "@/components/activity/feed";
 import { DateBlock, LedgerRow, MonthHeading, StakeLabel } from "@/components/ui/ledger";
 import { formatMoney } from "@/lib/domain/money";
 import type { GroupDetail } from "@/lib/server/groups";
 import { EmptyLedger } from "./empty-ledger";
-import { monthLabel, paidSentence, personName } from "./format";
+import { paidSentence, personName } from "./format";
 import { PaymentRow } from "./payment-row";
 
 type Entry =
-  | { kind: "expense"; at: Date; created: Date; expense: GroupDetail["expenses"][number] }
-  | { kind: "payment"; at: Date; created: Date; payment: GroupDetail["payments"][number] };
+  | { kind: "expense"; date: Date; createdAt: Date; expense: GroupDetail["expenses"][number] }
+  | { kind: "payment"; date: Date; createdAt: Date; payment: GroupDetail["payments"][number] };
 
 /** Expenses and payments merged, newest first, grouped by calendar month. */
 export function GroupLedger({ group, meId }: { group: GroupDetail; meId: string }) {
-  const entries: Entry[] = [
-    ...group.expenses.map((e) => ({ kind: "expense" as const, at: new Date(e.date), created: new Date(e.createdAt), expense: e })),
-    ...group.payments.map((p) => ({ kind: "payment" as const, at: new Date(p.date), created: new Date(p.createdAt), payment: p })),
-  ].sort((a, b) => b.at.getTime() - a.at.getTime() || b.created.getTime() - a.created.getTime());
+  const entries = sortByDate<Entry>([
+    ...group.expenses.map((e) => ({ kind: "expense" as const, date: new Date(e.date), createdAt: new Date(e.createdAt), expense: e })),
+    ...group.payments.map((p) => ({ kind: "payment" as const, date: new Date(p.date), createdAt: new Date(p.createdAt), payment: p })),
+  ]);
 
   if (entries.length === 0) {
     return (
@@ -23,21 +24,13 @@ export function GroupLedger({ group, meId }: { group: GroupDetail; meId: string 
     );
   }
 
-  const months: { label: string; entries: Entry[] }[] = [];
-  for (const entry of entries) {
-    const label = monthLabel(entry.at);
-    const last = months[months.length - 1];
-    if (last?.label === label) last.entries.push(entry);
-    else months.push({ label, entries: [entry] });
-  }
-
   return (
     <div>
-      {months.map((m) => (
-        <section key={m.label} aria-label={m.label}>
+      {groupByMonth(entries).map((m) => (
+        <section key={m.key} aria-label={m.label}>
           <MonthHeading>{m.label}</MonthHeading>
           <ul className="border-t border-rule">
-            {m.entries.map((entry) =>
+            {m.items.map((entry) =>
               entry.kind === "expense" ? (
                 <li key={`e-${entry.expense.id}`}>
                   <LedgerRow

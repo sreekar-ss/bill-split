@@ -5,7 +5,7 @@ import { createExpense } from "@/lib/server/expenses";
 import { createGroup } from "@/lib/server/groups";
 import { sentEmails } from "@/lib/server/mailer";
 import { notifyExpenseCreated, sendReminder, updateNotificationPrefs } from "@/lib/server/notifications";
-import { hasPushDevices, removePushSubscription, savePushSubscription, sendPushToUser, sentPushes } from "@/lib/server/push";
+import { removePushSubscription, savePushSubscription, sendPushToUser, sentPushes } from "@/lib/server/push";
 import { registerUser } from "@/lib/server/users";
 
 let n = 0;
@@ -17,6 +17,7 @@ async function user(name: string, verified = true) {
 }
 const keys = { p256dh: "B".repeat(87), auth: "A".repeat(22) };
 const sub = (endpoint: string) => ({ endpoint, keys });
+const hasPushDevices = async (userId: string) => (await db.pushSubscription.count({ where: { userId } })) > 0;
 
 beforeEach(() => {
   sentPushes.length = 0;

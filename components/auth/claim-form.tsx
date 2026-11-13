@@ -5,6 +5,7 @@ import { useActionState, useEffect, useRef, useState } from "react";
 import { claimAccountAction } from "@/app/actions/auth";
 import { Button } from "@/components/ui/button";
 import { Field, FormError, Input } from "@/components/ui/field";
+import { splitFailure } from "@/lib/client/run-action";
 import { PasswordInput } from "./password-input";
 import { useFocusFirstError } from "./use-focus-first-error";
 
@@ -15,10 +16,9 @@ export function ClaimForm({ token, email, defaultName }: { token: string; email:
   const [password, setPassword] = useState("");
   const formRef = useFocusFirstError(state);
 
-  const fieldErrors = state && !state.ok ? (state.fieldErrors ?? {}) : {};
+  const { fieldErrors, formError } = splitFailure(state);
   // The token itself failed (used meanwhile, or expired while the page was open).
   if (fieldErrors.token) return <ClaimLinkExpired message={fieldErrors.token} replacedForm />;
-  const formError = state && !state.ok && Object.keys(fieldErrors).length === 0 ? state.error : null;
 
   return (
     <form ref={formRef} action={formAction} noValidate className="space-y-4">

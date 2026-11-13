@@ -1,10 +1,11 @@
 import "server-only";
 import { z } from "zod";
 import { displayName } from "@/lib/utils/person";
+import { COMMENT_MAX } from "@/lib/validation";
 import { canViewExpense } from "./access";
 import { db } from "./db";
 import { AppError, notFound } from "./errors";
-import { assertNotArchived } from "./groups";
+import { throwIfArchived } from "./groups";
 import { parse } from "./parse";
 import { sendPushToUser } from "./push";
 import { hit } from "./rate-limit";
@@ -12,7 +13,7 @@ import { hit } from "./rate-limit";
 /** Short discussion threads on an expense ("was this Tuesday's dinner?"). Push-notified, never emailed. */
 
 const commentSchema = z.object({
-  text: z.string().trim().min(1, "Write a comment first.").max(500, "Keep comments under 500 characters."),
+  text: z.string().trim().min(1, "Write a comment first.").max(COMMENT_MAX, `Keep comments under ${COMMENT_MAX} characters.`),
 });
 
 const COMMENTS_PER_MINUTE = 20;
@@ -32,8 +33,8 @@ export type CommentItem = Awaited<ReturnType<typeof listComments>>[number];
 export async function addComment(userId: string, expenseId: string, input: unknown) {
   const { text } = parse(commentSchema, input);
   if (!(await canViewExpense(userId, expenseId))) throw notFound("expense");
-  const expense = await db.expense.findUniqueOrThrow({ where: { id: expenseId }, select: { groupId: true } });
-  if (expense.groupId) await assertNotArchived(expense.groupId);
+  const expense = await db.expense.findUniqueOrThrow({ where: { id: expenseId }, select: { group: { select: { archivedAt: true } } } });
+  throwIfArchived(expense.group?.archivedAt ?? null);
   const { count } = await hit(`comment:${userId}`, 60_000);
   if (count > COMMENTS_PER_MINUTE) throw new AppError("You're commenting very fast. Wait a minute and try again.", "RATE_LIMITED");
   return db.comment.create({ data: { expenseId, userId, text }, select: { id: true } });
@@ -41,10 +42,13 @@ export async function addComment(userId: string, expenseId: string, input: unkno
 
 /** Authors can delete their own comments. */
 export async function deleteComment(userId: string, commentId: string) {
-  const c = await db.comment.findUnique({ where: { id: commentId }, select: { userId: true, expenseId: true, expense: { select: { groupId: true } } } });
+  const c = await db.comment.findUnique({
+    where: { id: commentId },
+    select: { userId: true, expenseId: true, expense: { select: { group: { select: { archivedAt: true } } } } },
+  });
   if (!c || !(await canViewExpense(userId, c.expenseId))) throw notFound("comment");
   if (c.userId !== userId) throw new AppError("You can only delete your own comments.", "FORBIDDEN");
-  if (c.expense.groupId) await assertNotArchived(c.expense.groupId);
+  throwIfArchived(c.expense.group?.archivedAt ?? null);
   await db.comment.delete({ where: { id: commentId } });
   return { expenseId: c.expenseId };
 }

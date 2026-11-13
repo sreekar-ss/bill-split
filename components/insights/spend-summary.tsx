@@ -23,8 +23,8 @@ export function SpendSummary({
   return (
     <Panel role="region" aria-label={label}>
       <p className="text-body-sm font-semibold text-ink-muted">{label}</p>
-      <p className="mt-1 leading-[1.15]">
-        <Money cents={totalCents} currency={currency} className="hero-figure text-hero" />
+      <p className="mt-1 min-w-0 leading-[1.15] [overflow-wrap:anywhere]">
+        <Money cents={totalCents} currency={currency} className="hero-figure text-[clamp(1.75rem,9vw,2.5rem)] md:text-hero" />
       </p>
       <dl className="mt-4 grid grid-cols-2 gap-4 border-t border-rule pt-4">
         <div>

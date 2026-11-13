@@ -15,9 +15,9 @@ export function PageHeader({ title, subtitle, actions, back }: { title: React.Re
   );
 }
 
-export function Section({ title, action, children, className }: { title: string; action?: React.ReactNode; children: React.ReactNode; className?: string }) {
+export function Section({ title, action, children, className, id }: { title: string; action?: React.ReactNode; children: React.ReactNode; className?: string; id?: string }) {
   return (
-    <section className={cn("mt-8 first:mt-0", className)} aria-label={title}>
+    <section id={id} className={cn("mt-8 first:mt-0", className)} aria-label={title}>
       <div className="mb-3 flex items-baseline justify-between gap-3">
         <h2 className="text-title font-bold">{title}</h2>
         {action}

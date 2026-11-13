@@ -2,6 +2,16 @@ import { expect, test } from "./fixtures";
 import { createGroup, expectToast, login, logout, makeUser, register } from "./helpers";
 
 test.describe("account", () => {
+  test("Notifications is spaced from the section above like every other section", async ({ page }, info) => {
+    await register(page, makeUser(info, "Ana"));
+    await page.goto("/account");
+    const gaps = await page.locator("main section[aria-label]").evaluateAll((els) =>
+      els.slice(1).map((el) => `${el.getAttribute("aria-label")}: ${getComputedStyle(el).marginTop}`),
+    );
+    expect(gaps).toContain("Notifications: 32px");
+    expect(gaps).toContain("Install the app: 32px");
+  });
+
   test("update name and default currency", async ({ page }, info) => {
     const user = makeUser(info, "Ana");
     await register(page, user);

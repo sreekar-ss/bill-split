@@ -13,6 +13,8 @@ import { hashToken, newToken } from "./tokens";
 export type EmailTokenPurpose = "verify_email" | "claim_invite";
 
 const TTL_HOURS: Record<EmailTokenPurpose, number> = { verify_email: 48, claim_invite: 24 * 14 };
+/** At most this many emails of one purpose to one account in 24 hours (the cooldown alone would allow one a minute). */
+export const DAILY_EMAIL_CAP: Record<EmailTokenPurpose, number> = { verify_email: 5, claim_invite: 5 };
 /**
  * Minimum gap between two emails of the same purpose to the same account. 60s by default;
  * EMAIL_COOLDOWN_SECONDS overrides it (the E2E server sets 0 so "resend" can be tested quickly).
@@ -22,9 +24,12 @@ function cooldownSeconds() {
   return Number.isFinite(n) && n >= 0 && process.env.EMAIL_COOLDOWN_SECONDS !== "" ? n : 60;
 }
 
+/** A new link to email, or null when throttled (cooldown, or the day's cap for this purpose is used up). */
 async function issue(userId: string, purpose: EmailTokenPurpose): Promise<string | null> {
   const last = await db.emailToken.findFirst({ where: { userId, purpose }, orderBy: { createdAt: "desc" }, select: { createdAt: true } });
   if (last && Date.now() - last.createdAt.getTime() < cooldownSeconds() * 1000) return null;
+  const today = await db.emailToken.count({ where: { userId, purpose, createdAt: { gt: new Date(Date.now() - 24 * 3600_000) } } });
+  if (today >= DAILY_EMAIL_CAP[purpose]) return null;
   const token = newToken();
   await db.emailToken.create({
     data: { userId, purpose, tokenHash: hashToken(token), expiresAt: new Date(Date.now() + TTL_HOURS[purpose] * 3600_000) },
@@ -43,7 +48,7 @@ async function deliver(email: Parameters<typeof sendEmail>[0]) {
 
 // ── Verify email ────────────────────────────────────────────────────────────────────────────
 
-/** Sends (or re-sends, after a cooldown) the verification link. Returns false when throttled. */
+/** Sends (or re-sends, after a cooldown and up to the daily cap) the verification link. Returns false when throttled. */
 export async function sendVerificationEmail(userId: string): Promise<boolean> {
   const user = await db.user.findUniqueOrThrow({ where: { id: userId }, select: { email: true, name: true, emailVerified: true, status: true } });
   if (user.emailVerified || user.status !== "active") return true;

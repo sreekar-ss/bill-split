@@ -1,8 +1,9 @@
 import { Repeat } from "lucide-react";
 import { Fragment } from "react";
 import { DateBlock, LedgerRow, MonthHeading, PaymentLabel, StakeLabel } from "@/components/ui/ledger";
+import { formatMonth } from "@/lib/domain/dates";
 import { formatMoney, type Cents } from "@/lib/domain/money";
-import { displayName, type PersonStatus } from "@/lib/utils/person";
+import { displayName, personName, type PersonStatus } from "@/lib/utils/person";
 
 type Person = { id: string; name: string; status?: PersonStatus | null };
 type GroupRef = { id: string; name: string } | null;
@@ -40,14 +41,8 @@ export type FeedItem =
       group: GroupRef;
     };
 
-/** "You" / "you" for the viewer, otherwise the person's name. */
-function who(p: Person, meId: string, start: boolean) {
-  if (p.id !== meId) return displayName(p);
-  return start ? "You" : "you";
-}
-
 export function expenseMeta(item: Extract<FeedItem, { type: "expense" }>, meId: string) {
-  const paid = `${who(item.paidBy, meId, true)} paid ${formatMoney(item.amountCents, item.currency)}`;
+  const paid = `${personName(item.paidBy, meId, true)} paid ${formatMoney(item.amountCents, item.currency)}`;
   if (item.group) return `${paid} in ${item.group.name}`;
   if (!item.friend) return paid;
   // Direct expense: name the other person, or "you" when they paid.
@@ -70,7 +65,7 @@ function ExpenseMeta({ item, meId }: { item: Extract<FeedItem, { type: "expense"
 }
 
 export function paymentTitle(item: Extract<FeedItem, { type: "payment" }>, meId: string) {
-  return `${who(item.from, meId, true)} paid ${who(item.to, meId, false)}`;
+  return `${personName(item.from, meId, true)} paid ${personName(item.to, meId, false)}`;
 }
 
 /**
@@ -110,8 +105,6 @@ export function sortByDate<T extends { date: Date; createdAt: Date }>(items: T[]
   return [...items].sort((a, b) => b.date.getTime() - a.date.getTime() || b.createdAt.getTime() - a.createdAt.getTime());
 }
 
-const monthFormat = new Intl.DateTimeFormat("en-US", { month: "long", year: "numeric", timeZone: "UTC" });
-
 /** Consecutive items in the same (UTC) calendar month, keeping the given order. */
 export function groupByMonth<T extends { date: Date }>(items: T[]) {
   const groups: { key: string; label: string; items: T[] }[] = [];
@@ -120,7 +113,7 @@ export function groupByMonth<T extends { date: Date }>(items: T[]) {
     const key = `${d.getUTCFullYear()}-${d.getUTCMonth()}`;
     const last = groups.at(-1);
     if (last?.key === key) last.items.push(item);
-    else groups.push({ key, label: monthFormat.format(d), items: [item] });
+    else groups.push({ key, label: formatMonth(d), items: [item] });
   }
   return groups;
 }

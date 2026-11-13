@@ -112,11 +112,6 @@ export async function resetPassword(input: unknown) {
   return result;
 }
 
-/** Invalidate outstanding reset links (e.g. after the password is changed from the account page). */
-export async function revokeResetTokens(userId: string) {
-  await db.passwordResetToken.updateMany({ where: { userId, usedAt: null }, data: { usedAt: new Date() } });
-}
-
 function resetEmail(name: string, to: string, link: string) {
   const subject = "Reset your BillSplit password";
   const text = [

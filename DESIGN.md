@@ -70,7 +70,7 @@ Mobile (<768px)                         Desktop (≥1024px)
 - Content is left-aligned. Amounts are right-aligned in their own column.
 - **Add expense:** on mobile it's a floating highlighter-yellow pill above the tab bar ("Add expense"). It's fully rounded, unlike the 10px controls, which marks it as the primary action. On desktop it's a highlighter button in the rail/header. It's the only yellow thing on screen. It's hidden when there is no group or friend to split with.
 - **Group page on mobile:** no summary panel. The balance beam and the settle-up plan come first, then the ledger.
-- **Sheets:** forms (add expense, settle up, add member) open as a bottom sheet on mobile and a centred dialog on desktop.
+- **Sheets:** short forms (settle up, add member) open as a bottom sheet on phones. Add/Edit expense and Group settings open as their own full screen below `md`: a Back arrow top-left, the footer pinned to the bottom, and the system back gesture closes it. From `md` up, every form is a centred dialog.
 
 ## Components
 - **Ledger row:** a 44px+ tap target, made up of a leading date block (month abbreviation over the day number) or avatar, then title + meta, then a right-aligned amount column. The amount column shows the user's own stake ("you lent $20.00" in owed green / "you borrowed $12.50" in owe crimson / "not involved" muted). Rows are separated by `--rule`.
@@ -85,8 +85,8 @@ Mobile (<768px)                         Desktop (≥1024px)
 Inside a group, debts are simplified into a settle-up plan. The amount between you and a person (on Home and on the friend page) is the **sum of what the plan in each shared group says** plus your direct (non-group) balance with them. This way Home always agrees with what "Settle up" asks you to pay. The friend page shows the per-group breakdown so the total is explainable.
 
 ## Motion
-- Sheets slide up (200ms, ease-out). The balance beam bars grow from the centre once, on first render (300ms).
-- Nothing else animates on its own. Respect `prefers-reduced-motion` (no transitions).
+- Sheets slide up (200ms, ease-out). Full-screen forms slide in from the right (200ms, ease-out). The balance beam bars grow from the centre once, on first render (300ms).
+- Apart from these, nothing animates on its own. Respect `prefers-reduced-motion` (no transitions).
 
 ## Copy voice
 Plain, friendly, specific. "You owe Ben $12.50", not "Outstanding liability". Errors explain how to fix things: "That email doesn't have a BillSplit account yet. Ask them to sign up, then add them again."

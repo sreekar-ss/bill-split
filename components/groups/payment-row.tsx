@@ -97,7 +97,7 @@ export function PaymentRow({
           {note ? (
             <div className="flex items-baseline justify-between gap-4 py-3">
               <dt className="text-body-sm text-ink-muted">Note</dt>
-              <dd className="min-w-0 text-right">{note}</dd>
+              <dd className="min-w-0 text-right [overflow-wrap:anywhere]">{note}</dd>
             </div>
           ) : null}
         </dl>

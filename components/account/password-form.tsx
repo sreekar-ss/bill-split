@@ -7,13 +7,13 @@ import { PasswordInput } from "@/components/auth/password-input";
 import { useFocusFirstError } from "@/components/auth/use-focus-first-error";
 import { Button } from "@/components/ui/button";
 import { Field, FormError } from "@/components/ui/field";
-import { runAction } from "@/lib/client/run-action";
+import { runAction, splitFailure, type ActionFailure } from "@/lib/client/run-action";
 
 export function PasswordForm() {
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [pending, startTransition] = useTransition();
-  const [failure, setFailure] = useState<{ error: string; fieldErrors: Record<string, string> } | null>(null);
+  const [failure, setFailure] = useState<ActionFailure | null>(null);
   const formRef = useFocusFirstError(failure);
 
   function onSubmit(e: React.FormEvent<HTMLFormElement>) {
@@ -26,13 +26,12 @@ export function PasswordForm() {
         setNewPassword("");
         toast.success("Password changed", { description: "You've been logged out on your other devices." });
       } else {
-        setFailure({ error: result.error, fieldErrors: result.fieldErrors ?? {} });
+        setFailure(result);
       }
     });
   }
 
-  const fieldErrors = failure?.fieldErrors ?? {};
-  const formError = failure && Object.keys(fieldErrors).length === 0 ? failure.error : null;
+  const { fieldErrors, formError } = splitFailure(failure);
 
   return (
     <form ref={formRef} onSubmit={onSubmit} noValidate className="space-y-4">

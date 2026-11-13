@@ -2,9 +2,9 @@ import "server-only";
 import { displayName } from "@/lib/utils/person";
 import { appUrl } from "./app-url";
 import { db } from "./db";
-import { AppError, forbidden } from "./errors";
+import { AppError } from "./errors";
 import { ensureFriendship } from "./friends";
-import { assertGroupMember } from "./groups";
+import { assertGroupAdmin, assertGroupMember, assertNotArchived } from "./groups";
 import { sign, verifySignature } from "./tokens";
 
 /**
@@ -25,7 +25,7 @@ async function resolve(token: string | undefined) {
   const signature = token.slice(dot + 1);
   const group = await db.group.findUnique({
     where: { id: groupId },
-    select: { id: true, name: true, inviteVersion: true, inviteEnabled: true, currency: true },
+    select: { id: true, name: true, inviteVersion: true, inviteEnabled: true, currency: true, archivedAt: true },
   });
   if (!group || !group.inviteEnabled) return null;
   if (!verifySignature(PURPOSE, `${group.id}:${group.inviteVersion}`, signature)) return null;
@@ -33,6 +33,8 @@ async function resolve(token: string | undefined) {
 }
 
 export const INVALID_INVITE = "This invite link no longer works. Ask someone in the group for a new one.";
+/** Shown to people who aren't in the group yet, so it points them at someone who can unarchive it. */
+export const ARCHIVED_INVITE = "This group is archived. Ask someone in it to unarchive it first.";
 
 /** The current link, for any member to share. */
 export async function getInviteLink(userId: string, groupId: string) {
@@ -43,9 +45,8 @@ export async function getInviteLink(userId: string, groupId: string) {
 
 /** Admins: invalidate the old link and issue a new one. */
 export async function resetInviteLink(userId: string, groupId: string) {
-  const me = await assertGroupMember(groupId, userId);
-  const group = await db.group.findUniqueOrThrow({ where: { id: groupId }, select: { createdById: true } });
-  if (me.role !== "admin" && group.createdById !== userId) throw forbidden("Only the group's admin can reset the invite link.");
+  await assertGroupAdmin(groupId, userId, "Only the group's admin can reset the invite link.");
+  await assertNotArchived(groupId);
   const updated = await db.group.update({
     where: { id: groupId },
     data: { inviteVersion: { increment: 1 }, inviteEnabled: true },
@@ -72,6 +73,8 @@ export async function getInvitePreview(token: string | undefined, viewerId?: str
     memberCount: shown.length,
     memberNames: shown.slice(0, 5).map((m) => displayName(m.user)),
     alreadyMember: viewerId ? members.some((m) => m.userId === viewerId) : false,
+    /** Nobody can join while the group is archived. */
+    archived: Boolean(group.archivedAt),
   };
 }
 
@@ -81,6 +84,7 @@ export async function joinGroupByInvite(userId: string, token: string) {
   if (!group) throw new AppError(INVALID_INVITE, "NOT_FOUND");
   const members = await db.groupMember.findMany({ where: { groupId: group.id }, select: { userId: true } });
   if (members.some((m) => m.userId === userId)) return { groupId: group.id, joined: false };
+  if (group.archivedAt) throw new AppError(ARCHIVED_INVITE, "CONFLICT");
   await db.$transaction(async (tx) => {
     await tx.groupMember.create({ data: { groupId: group.id, userId } });
     for (const m of members) await ensureFriendship(tx, userId, m.userId);

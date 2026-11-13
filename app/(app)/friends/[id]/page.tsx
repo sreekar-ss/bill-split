@@ -80,8 +80,8 @@ export default async function FriendPage({ params }: Params) {
         <p className="text-body-sm font-semibold text-ink-muted">{headline}</p>
         {primary ? (
           <>
-            <p className="mt-1">
-              <Money cents={primary.cents} currency={primary.currency} tone="signed" className="hero-figure text-hero leading-[1.15]" />
+            <p className="mt-1 min-w-0 [overflow-wrap:anywhere]">
+              <Money cents={primary.cents} currency={primary.currency} tone="signed" className="hero-figure text-[clamp(1.75rem,9vw,2.5rem)] md:text-hero leading-[1.15]" />
             </p>
             {others.map((b) => (
               <p key={b.currency} className={cn("mt-1 text-body-sm font-semibold", b.cents > 0 ? "text-owed" : "text-owe")}>

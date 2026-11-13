@@ -1,4 +1,5 @@
 /** Shared helpers for the spending pages. Months are "yyyy-mm" calendar months (UTC). */
+import { formatDay, formatMonth, fromDateInput } from "@/lib/domain/dates";
 
 export const PERIODS = [6, 12] as const;
 export type Period = (typeof PERIODS)[number];
@@ -13,17 +14,17 @@ export function first(value: string | string[] | undefined): string | undefined 
 }
 
 function monthDate(month: string) {
-  return new Date(`${month}-15T12:00:00.000Z`);
+  return fromDateInput(`${month}-01`);
 }
 
 /** "2026-06" → "Jun". */
 export function monthShort(month: string): string {
-  return new Intl.DateTimeFormat("en-US", { month: "short", timeZone: "UTC" }).format(monthDate(month));
+  return formatDay(monthDate(month), { month: "short" });
 }
 
 /** "2026-06" → "June 2026". */
 export function monthLong(month: string): string {
-  return new Intl.DateTimeFormat("en-US", { month: "long", year: "numeric", timeZone: "UTC" }).format(monthDate(month));
+  return formatMonth(monthDate(month));
 }
 
 /** "Your share in the last 6 months" style period phrase. */

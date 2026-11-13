@@ -30,8 +30,8 @@ export function SummaryPanel({ totals, currency }: { totals: CurrencySummary[]; 
   return (
     <Panel role="region" aria-label="Your balance">
       <p className="text-body-sm font-semibold text-ink-muted">{label(first, multi)}</p>
-      <p className="mt-1 leading-[1.15]">
-        <Money cents={first.netCents} currency={first.currency} tone="signed" className="hero-figure text-hero" />
+      <p className="mt-1 min-w-0 leading-[1.15] [overflow-wrap:anywhere]">
+        <Money cents={first.netCents} currency={first.currency} tone="signed" className="hero-figure text-[clamp(1.75rem,9vw,2.5rem)] md:text-hero" />
       </p>
       <Figures summary={first} />
       {/* Other currencies stay compact so the People beam is still on the first screen of a phone. */}

@@ -155,4 +155,3 @@ export async function getDashboard(userId: string) {
     recent,
   };
 }
-export type Dashboard = Awaited<ReturnType<typeof getDashboard>>;

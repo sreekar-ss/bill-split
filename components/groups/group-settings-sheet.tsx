@@ -8,6 +8,7 @@ import { archiveGroupAction, deleteGroupAction, removeMemberAction, updateGroupA
 import { useFocusFirstError } from "@/components/auth/use-focus-first-error";
 import { Avatar } from "@/components/ui/avatar";
 import { Button, buttonVariants } from "@/components/ui/button";
+import { useBackToCloseControls } from "@/components/ui/back-to-close";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Field, FormError, Input, Select } from "@/components/ui/field";
 import { Sheet } from "@/components/ui/sheet";
@@ -54,11 +55,19 @@ export function GroupSettingsSheet({
   group: GroupSettingsData;
   meId: string;
 }) {
+  // The longest sheet: on phones it's its own screen, so the back gesture closes it.
+  const { onOpenChange: close, release } = useBackToCloseControls(open, onOpenChange);
+  // Leave and Delete go to /groups with router.replace: release our history entry rather than going
+  // back, so the replace overwrites it (a history.back() here would race the replace).
+  const closeForNavigation = () => {
+    release();
+    close(false);
+  };
   return (
-    <Sheet open={open} onOpenChange={onOpenChange} title="Group settings" description={group.name}>
+    <Sheet screen open={open} onOpenChange={close} title="Group settings" description={group.name}>
       <div className="space-y-8 pb-2">
         <DetailsForm group={group} />
-        <MembersSection group={group} meId={meId} onClose={() => onOpenChange(false)} />
+        <MembersSection group={group} meId={meId} onClose={() => close(false)} onCloseForNavigation={closeForNavigation} />
       </div>
     </Sheet>
   );
@@ -146,7 +155,18 @@ function memberBalance(cents: number, currency: string) {
   return { text: "settled up", cls: "text-ink-muted" };
 }
 
-function MembersSection({ group, meId, onClose }: { group: GroupSettingsData; meId: string; onClose: () => void }) {
+function MembersSection({
+  group,
+  meId,
+  onClose,
+  onCloseForNavigation,
+}: {
+  group: GroupSettingsData;
+  meId: string;
+  onClose: () => void;
+  /** Closes the sheet just before a router.replace() away from the group. */
+  onCloseForNavigation: () => void;
+}) {
   const router = useRouter();
   const [confirm, setConfirm] = useState<Confirm>(null);
   const [confirmError, setConfirmError] = useState<string | null>(null);
@@ -173,7 +193,7 @@ function MembersSection({ group, meId, onClose }: { group: GroupSettingsData; me
         if (!res.ok) return setConfirmError(res.error);
         toast.success("You left the group");
         setConfirm(null);
-        onClose();
+        onCloseForNavigation();
         router.replace("/groups");
       } else if (current.kind === "archive") {
         // Only offered when settled; if a balance opened up since the page loaded, the service's own
@@ -188,7 +208,7 @@ function MembersSection({ group, meId, onClose }: { group: GroupSettingsData; me
         if (!res.ok) return setConfirmError(res.error);
         toast.success("Group deleted");
         setConfirm(null);
-        onClose();
+        onCloseForNavigation();
         router.replace("/groups");
       }
     });

@@ -4,9 +4,9 @@ import { anchorFor, describeSchedule, endsOnTooSoon, firstRepeatOn, nextOccurren
 import { expenseSchema, recurrenceSchema } from "@/lib/validation";
 import { db } from "./db";
 import { AppError, notFound } from "./errors";
-import { createExpense } from "./expenses";
+import { createExpense, saveExpense } from "./expenses";
 import { areFriends } from "./friends";
-import { assertNotArchived } from "./groups";
+import { throwIfArchived } from "./groups";
 import { notifyExpenseCreated } from "./notifications";
 import { parse } from "./parse";
 
@@ -17,7 +17,13 @@ const MAX_CATCH_UP = 6;
  * Create an expense and make it repeat. The first occurrence is the expense itself (on its date);
  * the schedule then continues from firstRepeatOn (never in the past).
  */
-export async function createRecurringExpense(
+export async function createRecurringExpense(userId: string, expenseInput: unknown, recurrenceInput: unknown, today = toDateInput(new Date())) {
+  const { expenseId, recurringId, groupId } = await saveRecurringExpense(userId, expenseInput, recurrenceInput, today);
+  return { expenseId, recurringId, groupId };
+}
+
+/** createRecurringExpense, plus `created`: false when this call was a re-send of an expense already saved (see saveExpense). */
+export async function saveRecurringExpense(
   userId: string,
   expenseInput: unknown,
   recurrenceInput: unknown,
@@ -39,12 +45,13 @@ export async function createRecurringExpense(
 
   // Validate + create the first occurrence through the normal path (authorization, split math).
   // With a clientId this is idempotent: a re-send after a lost response returns the saved expense.
-  const first = await createExpense(userId, data);
+  const first = await saveExpense(userId, data);
   const expense = await db.expense.findUniqueOrThrow({ where: { id: first.id }, select: { currency: true, recurringId: true } });
   // Already made repeating by an earlier send of this same form: never add a second schedule.
-  if (expense.recurringId) return { expenseId: first.id, recurringId: expense.recurringId, groupId: first.groupId };
+  // (`created` still comes from saveExpense: a concurrent re-send may have linked the expense this call saved.)
+  if (expense.recurringId) return { expenseId: first.id, recurringId: expense.recurringId, groupId: first.groupId, created: first.created };
 
-  const created = await db.$transaction(async (tx) => {
+  const recurringId = await db.$transaction(async (tx) => {
     const recurring = await tx.recurringExpense.create({
     data: {
       createdById: userId,
@@ -79,19 +86,22 @@ export async function createRecurringExpense(
     const winner = await db.expense.findUniqueOrThrow({ where: { id: first.id }, select: { recurringId: true } });
     return winner.recurringId!;
   });
-  return { expenseId: first.id, recurringId: created, groupId: first.groupId };
+  return { expenseId: first.id, recurringId, groupId: first.groupId, created: first.created };
 }
 /** Thrown inside the transaction to roll back a schedule that a concurrent identical send beat. */
 const LOST_RACE = new Error("recurring: lost clientId race");
 
 /** Who may see/manage a schedule: group members, or either person in a direct one. */
 async function loadManageable(userId: string, id: string) {
-  const r = await db.recurringExpense.findUnique({ where: { id }, include: { group: { select: { members: { select: { userId: true } } } } } });
+  const r = await db.recurringExpense.findUnique({
+    where: { id },
+    include: { group: { select: { archivedAt: true, members: { select: { userId: true } } } } },
+  });
   if (!r) throw notFound("recurring expense");
   const ok = r.group ? r.group.members.some((m) => m.userId === userId) : r.createdById === userId || r.friendId === userId;
   if (!ok) throw notFound("recurring expense");
   // Archived groups are read-only, schedules included (no resuming one until it's unarchived).
-  if (r.groupId) await assertNotArchived(r.groupId);
+  if (r.group) throwIfArchived(r.group.archivedAt);
   return r;
 }
 
@@ -218,7 +228,8 @@ export async function runDueRecurring(today = toDateInput(new Date())) {
           { recurringId: r.id, recurrenceKey: `${r.id}:${date}`, currency: r.currency },
         );
         created++;
-        await notifyExpenseCreated(e.id, "", { recurring: true });
+        // Caught here, not by the catch below: a failed notification must never pause a healthy schedule.
+        await notifyExpenseCreated(e.id, "", { recurring: true }).catch((err) => console.error("[recurring] notify failed", r.id, err));
       } catch (error) {
         const duplicate = typeof error === "object" && error !== null && "code" in error && (error as { code: string }).code === "P2002";
         if (!duplicate) {

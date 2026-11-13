@@ -140,14 +140,43 @@
     opacity: 1;
   }
 }
-.animate-beam {
+@keyframes screen-in {
+  from {
+    transform: translateX(24px);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+@utility animate-beam {
   animation: beam-grow 300ms ease-out both;
 }
-.animate-sheet {
+@utility animate-sheet {
   animation: sheet-up 200ms ease-out both;
 }
-.animate-fade {
+/* A form that opens as its own screen on phones. */
+@utility animate-screen {
+  animation: screen-in 200ms ease-out both;
+}
+@utility animate-fade {
   animation: fade-in 150ms ease-out both;
+}
+
+/*
+ * iPhone Safari gives date fields a minimum width that ignores width: 100%, so in a two-column
+ * row they spill past the edge and the whole form scrolls sideways. Let them shrink like text fields.
+ */
+input[type="date"] {
+  -webkit-appearance: none;
+  appearance: none;
+  min-width: 0;
+  display: block;
+}
+input[type="date"]::-webkit-date-and-time-value {
+  text-align: left;
+  margin: 0;
 }
 
 @media (prefers-reduced-motion: reduce) {

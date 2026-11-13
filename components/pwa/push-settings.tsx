@@ -107,7 +107,7 @@ export function PushSettings({ publicKey }: { publicKey: string | null }) {
             On iPhone, push notifications work in the installed app. Add BillSplit to your Home Screen, open it from there, and turn
             them on here.
           </p>
-          <Button variant="secondary" size="sm" onClick={() => install?.open()}>
+          <Button variant="secondary" size="sm" className="h-11" onClick={() => install?.open()}>
             Add to Home Screen
           </Button>
         </div>
@@ -157,7 +157,7 @@ export function PushSettings({ publicKey }: { publicKey: string | null }) {
       </div>
       {state === "on" ? (
         <>
-          <Button variant="secondary" size="sm" onClick={test} disabled={testResult === "Sending…"}>
+          <Button variant="secondary" size="sm" className="h-11" onClick={test} disabled={testResult === "Sending…"}>
             <BellRing aria-hidden />
             Send a test notification
           </Button>

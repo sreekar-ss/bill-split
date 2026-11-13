@@ -6,10 +6,6 @@ export type Cents = number;
 export const SUPPORTED_CURRENCIES = ["USD", "EUR", "GBP", "INR", "CAD", "AUD"] as const;
 export type Currency = (typeof SUPPORTED_CURRENCIES)[number];
 
-export function isCents(value: unknown): value is Cents {
-  return typeof value === "number" && Number.isSafeInteger(value);
-}
-
 /**
  * Parse a user-typed amount ("12", "12.5", "1,234.56", "$7.10") into cents.
  * Returns null for anything that isn't a non-negative amount with at most 2 decimals.

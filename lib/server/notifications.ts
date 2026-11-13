@@ -37,6 +37,8 @@ const PREF_FIELD = {
 } as const;
 
 export const REMINDER_COOLDOWN_DAYS = 3;
+/** Expense and payment pushes one person can trigger a minute (the saves themselves aren't limited). */
+export const NOTIFY_PER_MINUTE = 20;
 
 // ── Preferences & unsubscribe ───────────────────────────────────────────────────────────────
 
@@ -117,77 +119,85 @@ const recipientSelect = {
 
 // ── Expense added ───────────────────────────────────────────────────────────────────────────
 
-/** "Ana added Dinner in Lisbon trip — your share is $30.00". Sent to everyone with a stake except the actor. */
+/** "Ana added Dinner in Lisbon trip — your share is $30.00". Sent to everyone with a stake except the actor. Never throws. */
 export async function notifyExpenseCreated(expenseId: string, actorId: string, opts: { recurring?: boolean } = {}) {
-  const e = await db.expense.findUnique({
-    where: { id: expenseId },
-    select: {
-      id: true,
-      description: true,
-      amountCents: true,
-      currency: true,
-      paidById: true,
-      paidBy: { select: { name: true, status: true } },
-      group: { select: { name: true } },
-      splits: { select: { userId: true, amountCents: true, user: { select: recipientSelect } } },
-    },
-  });
-  if (!e) return;
-  const actor = await db.user.findUnique({ where: { id: actorId }, select: { name: true } });
-  const ledgerExpense = { paidById: e.paidById, amountCents: e.amountCents, shares: e.splits };
-  const where = e.group ? ` in ${e.group.name}` : "";
-
-  for (const s of e.splits) {
-    const u = s.user;
-    if (u.id === actorId) continue;
-    // Push only: email is reserved for things with no other channel (see the policy at the top).
-    if (!canPush(u, "expenses")) continue;
-    const stake = stakeInExpense(u.id, ledgerExpense);
-    if (stake === 0 && s.amountCents === 0) continue;
-    const share = formatMoney(s.amountCents, e.currency);
-    const effect =
-      stake > 0 ? `You get back ${formatMoney(stake, e.currency)}.` : stake < 0 ? `You owe ${formatMoney(-stake, e.currency)}.` : "";
-    await sendPushToUser(u.id, {
-      title: opts.recurring ? `${e.description} added (recurring)` : `${actor?.name ?? "Someone"} added ${e.description}`,
-      body: `${effect || `Your share is ${share}.`}${where ? ` ${where.trim().replace(/^in /, "In ")}.` : ""}`,
-      url: `/expenses/${e.id}`,
-      tag: `expense-${e.id}`,
+  try {
+    const e = await db.expense.findUnique({
+      where: { id: expenseId },
+      select: {
+        id: true,
+        description: true,
+        amountCents: true,
+        currency: true,
+        paidById: true,
+        paidBy: { select: { name: true, status: true } },
+        group: { select: { name: true } },
+        splits: { select: { userId: true, amountCents: true, user: { select: recipientSelect } } },
+      },
     });
+    if (!e) return;
+    const actor = await db.user.findUnique({ where: { id: actorId }, select: { name: true } });
+    const ledgerExpense = { paidById: e.paidById, amountCents: e.amountCents, shares: e.splits };
+    const where = e.group ? ` in ${e.group.name}` : "";
+
+    for (const s of e.splits) {
+      const u = s.user;
+      if (u.id === actorId) continue;
+      // Push only: email is reserved for things with no other channel (see the policy at the top).
+      if (!canPush(u, "expenses")) continue;
+      const stake = stakeInExpense(u.id, ledgerExpense);
+      if (stake === 0 && s.amountCents === 0) continue;
+      const share = formatMoney(s.amountCents, e.currency);
+      const effect =
+        stake > 0 ? `You get back ${formatMoney(stake, e.currency)}.` : stake < 0 ? `You owe ${formatMoney(-stake, e.currency)}.` : "";
+      await sendPushToUser(u.id, {
+        title: opts.recurring ? `${e.description} added (recurring)` : `${actor?.name ?? "Someone"} added ${e.description}`,
+        body: `${effect || `Your share is ${share}.`}${where ? ` ${where.trim().replace(/^in /, "In ")}.` : ""}`,
+        url: `/expenses/${e.id}`,
+        tag: `expense-${e.id}`,
+      });
+    }
+  } catch (error) {
+    console.error("[notify] expense notification failed", error);
   }
 }
 
 // ── Payment recorded ────────────────────────────────────────────────────────────────────────
 
-/** Tells the other party (not the actor) that a payment was recorded. */
+/** Tells the other party (not the actor) that a payment was recorded. Never throws. */
 export async function notifyPaymentRecorded(paymentId: string, actorId: string) {
-  const p = await db.settlement.findUnique({
-    where: { id: paymentId },
-    select: {
-      amountCents: true,
-      currency: true,
-      groupId: true,
-      group: { select: { name: true } },
-      fromUser: { select: recipientSelect },
-      toUser: { select: recipientSelect },
-    },
-  });
-  if (!p) return;
-  const where = p.group ? ` in ${p.group.name}` : "";
-  const amount = formatMoney(p.amountCents, p.currency);
-  for (const [u, other, line] of [
-    [p.toUser, p.fromUser, `${displayName(p.fromUser)} paid you ${amount}${where}.`],
-    [p.fromUser, p.toUser, `A payment of ${amount} from you to ${displayName(p.toUser)}${where} was recorded.`],
-  ] as const) {
-    if (u.id === actorId) continue;
-    const path = p.groupId ? `/groups/${p.groupId}` : `/friends/${other.id}`;
-    if (canPush(u, "payments")) {
-      await sendPushToUser(u.id, {
-        title: u.id === p.toUser.id ? `${displayName(p.fromUser)} paid you ${amount}` : `Payment of ${amount} recorded`,
-        body: line,
-        url: path,
-        tag: `payment-${paymentId}`,
-      });
+  try {
+    const p = await db.settlement.findUnique({
+      where: { id: paymentId },
+      select: {
+        amountCents: true,
+        currency: true,
+        groupId: true,
+        group: { select: { name: true } },
+        fromUser: { select: recipientSelect },
+        toUser: { select: recipientSelect },
+      },
+    });
+    if (!p) return;
+    const where = p.group ? ` in ${p.group.name}` : "";
+    const amount = formatMoney(p.amountCents, p.currency);
+    for (const [u, other, line] of [
+      [p.toUser, p.fromUser, `${displayName(p.fromUser)} paid you ${amount}${where}.`],
+      [p.fromUser, p.toUser, `A payment of ${amount} from you to ${displayName(p.toUser)}${where} was recorded.`],
+    ] as const) {
+      if (u.id === actorId) continue;
+      const path = p.groupId ? `/groups/${p.groupId}` : `/friends/${other.id}`;
+      if (canPush(u, "payments")) {
+        await sendPushToUser(u.id, {
+          title: u.id === p.toUser.id ? `${displayName(p.fromUser)} paid you ${amount}` : `Payment of ${amount} recorded`,
+          body: line,
+          url: path,
+          tag: `payment-${paymentId}`,
+        });
+      }
     }
+  } catch (error) {
+    console.error("[notify] payment notification failed", error);
   }
 }
 

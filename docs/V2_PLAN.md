@@ -2,7 +2,7 @@
 
 MVP1 (live since 2026-11-12) lets people split costs with others who already have accounts and see who owes whom. v2 has two jobs: **bring people in** and **get people paid back**. Receipt scanning is the headline feature, but it ships **last**, as Milestone D, so everything else lands first.
 
-## Milestone A — bring people in, safely
+## Milestone A — bring people in, safely (shipped)
 | Feature | Scope |
 |---|---|
 | Email verification | Signing up sends a verification link. Unverified accounts see a banner and can resend the link. A verified email is required to claim an invited placeholder (below). |
@@ -14,11 +14,11 @@ MVP1 (live since 2026-11-12) lets people split costs with others who already hav
 | Delete account and export data | Export downloads all your data as JSON. Delete is blocked while any balance is unsettled. When it goes through, the account is anonymised to "Deleted user", so other people's ledgers still add up. |
 | Real 404s | Pages for groups, friends and expenses you can't access return HTTP 404, not 200. |
 
-## Milestone B — keep people coming back
+## Milestone B — keep people coming back (shipped)
 | Feature | Scope |
 |---|---|
-| Email notifications | "Ana added Dinner, you owe $30", "Ben recorded a $42 payment to you", and invites. Each type can be turned on or off on a notification settings page, and every email has a one-click unsubscribe link. Emails are sent after the response, so the app never waits on the mail server. |
-| Reminders | A "Remind Ben" button on settle-up rows emails a polite nudge. It has a cooldown of 1 per pair per 3 days. |
+| Notifications | "Ana added Dinner, you owe $30" and "Ben recorded a $42 payment to you" arrive as push notifications. Email is used only where it's required: confirming an email, password resets, invites to someone without an account, and the reminder fallback (see the channel table below). Each type can be turned on or off on a notification settings page, and every email has a one-click unsubscribe link. Notifications are sent after the response, so the app never waits on the push or mail service. |
+| Reminders | A "Remind Ben" button on settle-up rows sends a polite push nudge, or an email if Ben has no push device. It has a cooldown of 1 per pair per 3 days. |
 | Weekly digest | Optional and off by default. A Monday summary of your balances. It's skipped when you're all settled up. |
 | Recurring expenses | Any expense can repeat weekly or monthly, with an end date or none. A daily Vercel Cron job creates the due expenses idempotently. Recurring expenses can be paused or stopped, and they're labelled on the ledger. |
 
@@ -38,11 +38,20 @@ Resend's free plan allows 3,000 emails a month and 100 a day, so email is kept f
 | Expense added, payment recorded, recurring expense created | ✓ | — |
 | Weekly summary (opt-in) | ✓ | — |
 | Reminder | ✓ | only if the person has no push device |
+| Comment added | ✓ | — |
 | Confirm email, password reset, invite to someone without an account | — | ✓ (always) |
 
 - Optional emails (reminder fallbacks) are skipped once the day's count reaches `EMAIL_OPTIONAL_DAILY_CAP` (default 80). Required emails always send.
 - "Turn on notifications?" prompt: appears ~6s after opening the app when push is supported and permission hasn't been decided. Once per session, never in the same session as the install prompt, and "Not now" hides it for 14 days.
 - "Send a test notification" reports whether the push reached the browser, which separates "the OS is hiding notifications" from "it never arrived".
+
+## v2.1 (shipped 2026-11-13)
+- **Insights:** your spending (your share, not what you paid for others) by month and category, per currency, for you and for each group.
+- **Search & filters:** search every expense you can see, filtered by group, friend, category, date range, who paid and amount.
+- **CSV export:** download a group's expenses and payments as a CSV, with one column per person's share.
+- **Comments:** a short thread on each expense, notified by push and never emailed.
+- **Offline saves:** expenses added while offline are queued and saved when the connection returns.
+- **Group archive & emoji:** archive a group once everyone is settled (hidden from lists and read-only until unarchived), and give each group an emoji.
 
 ## Milestone C — travel-ready (ON HOLD — the owner will ask when it's needed)
 | Feature | Scope |
@@ -64,7 +73,14 @@ A self-hosted, open-weight agent service behind a fixed HTTP contract, run as as
 The person always reviews the result, and the itemized split shares tax, tip and discounts proportionally. The model is chosen by testing candidates on a set of 30–50 real receipts. The service runs on the owner's Mac first, then on Modal. Details are in the conversation notes. It still needs the owner's hardware and a language choice.
 
 ## Not in v2
-In-app payments, real-time live updates, native mobile apps, gamification. The v2.1 candidates are insights/charts, search plus CSV export, comments, a PWA with offline entry, and group archive/emoji.
+In-app payments, real-time live updates, native mobile apps, gamification.
+
+## Later ideas
+Not planned yet; kept from the old v0.2 roadmap:
+- Multi-language support (i18n).
+- Budgets per group.
+- Expense templates for common expenses, and bulk import from CSV.
+- A QR code for joining a group.
 
 ## Process
 For each milestone, the work runs in this order:

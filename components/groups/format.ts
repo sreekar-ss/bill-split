@@ -1,5 +1,7 @@
 /** Small copy helpers shared by the group screens (pure, safe on server and client). */
-import { displayName, type PersonStatus } from "@/lib/utils/person";
+import { personName, type PersonStatus } from "@/lib/utils/person";
+
+export { personName };
 
 /** Anyone shown by name in the group screens. `status` marks invited placeholders and deleted accounts. */
 export type NamedPerson = { id: string; name: string; status?: PersonStatus | null };
@@ -22,12 +24,6 @@ export function memberCount(n: number): string {
   return n === 1 ? "1 member" : `${n} members`;
 }
 
-/** The viewer is "You" at the start of a sentence and "you" elsewhere; others read "Ben (invited)", "Deleted user". */
-export function personName(person: NamedPerson, meId: string, start = false): string {
-  if (person.id !== meId) return displayName(person);
-  return start ? "You" : "you";
-}
-
 /** "Chloe pays you", "You pay Ben", "Dev pays Ben". */
 export function paysSentence(from: NamedPerson, to: NamedPerson, meId: string): string {
   const verb = from.id === meId ? "pay" : "pays";
@@ -37,8 +33,4 @@ export function paysSentence(from: NamedPerson, to: NamedPerson, meId: string): 
 /** "Chloe paid you", "You paid Ben". */
 export function paidSentence(from: NamedPerson, to: NamedPerson, meId: string): string {
   return `${personName(from, meId, true)} paid ${personName(to, meId)}`;
-}
-
-export function monthLabel(date: Date | string): string {
-  return new Intl.DateTimeFormat("en-US", { month: "long", year: "numeric", timeZone: "UTC" }).format(new Date(date));
 }

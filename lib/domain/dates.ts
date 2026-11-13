@@ -21,3 +21,8 @@ export function todayInput(now: Date = new Date()): string {
 export function formatDay(date: Date | string, opts: Intl.DateTimeFormatOptions = { month: "short", day: "numeric" }): string {
   return new Intl.DateTimeFormat("en-US", { ...opts, timeZone: "UTC" }).format(new Date(date));
 }
+
+/** "June 2026": the (UTC) calendar month a date falls in. */
+export function formatMonth(date: Date | string): string {
+  return formatDay(date, { month: "long", year: "numeric" });
+}

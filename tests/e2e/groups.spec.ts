@@ -2,6 +2,7 @@ import { expect, test } from "./fixtures";
 import {
   addExpense,
   addMember,
+  closeSheet,
   createGroup,
   dialog,
   expectBeam,
@@ -92,7 +93,7 @@ test.describe("groups", () => {
     await sheet.getByLabel("Group name").fill("Ski week");
     await sheet.getByRole("button", { name: "Save changes" }).click();
     await expectToast(page, "Changes saved");
-    await sheet.getByRole("button", { name: "Close" }).click();
+    await closeSheet(sheet);
     await expect(page.getByRole("heading", { level: 1, name: "Ski week" })).toBeVisible();
 
     await page.getByRole("button", { name: "Group settings" }).click();

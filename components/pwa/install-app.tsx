@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Sheet } from "@/components/ui/sheet";
 import { detectPlatform, shouldAutoPrompt, type InstallPlatform } from "@/lib/pwa/detect";
+import { afterDelayWhenIdle, INSTALL_SHOWN_KEY, storageGet, storageSet } from "@/lib/pwa/prompt-storage";
 
 /**
  * "Install the app": iPhone gets the Share → Add to Home Screen steps (iOS has no install API);
@@ -13,7 +14,6 @@ import { detectPlatform, shouldAutoPrompt, type InstallPlatform } from "@/lib/pw
  * at most once per session, only on phones, only for engaged users, and "Not now" hides it 30 days.
  */
 const DISMISS_KEY = "bs-install-dismissed-at";
-const SESSION_KEY = "bs-install-shown";
 const AUTO_DELAY_MS = 4000;
 
 interface BeforeInstallPromptEvent extends Event {
@@ -32,21 +32,6 @@ const InstallContext = createContext<InstallApi | null>(null);
 export function useInstallApp(): InstallApi | null {
   return useContext(InstallContext);
 }
-
-const read = (store: () => Storage, key: string) => {
-  try {
-    return store().getItem(key);
-  } catch {
-    return null;
-  }
-};
-const write = (store: () => Storage, key: string, value: string) => {
-  try {
-    store().setItem(key, value);
-  } catch {
-    /* private mode: fine */
-  }
-};
 
 function isStandalone() {
   return (
@@ -95,28 +80,27 @@ export function InstallAppProvider({ engaged, children }: { engaged: boolean; ch
 
   // Open by itself once, a few seconds in, when it makes sense.
   useEffect(() => {
-    const dismissed = Number(read(() => localStorage, DISMISS_KEY)) || null;
+    const dismissed = Number(storageGet(() => localStorage, DISMISS_KEY)) || null;
     const ok = shouldAutoPrompt({
       platform,
       standalone,
       engaged,
       dismissedAt: dismissed,
-      shownThisSession: read(() => sessionStorage, SESSION_KEY) === "1",
+      shownThisSession: storageGet(() => sessionStorage, INSTALL_SHOWN_KEY) === "1",
       now: Date.now(),
       canInstallNatively: Boolean(deferred),
     });
     if (!ok) return;
-    const t = window.setTimeout(() => {
-      write(() => sessionStorage, SESSION_KEY, "1");
+    return afterDelayWhenIdle(() => {
+      storageSet(() => sessionStorage, INSTALL_SHOWN_KEY, "1");
       setOpen(true);
     }, AUTO_DELAY_MS);
-    return () => window.clearTimeout(t);
   }, [platform, standalone, engaged, deferred]);
 
   const api = useMemo(() => ({ platform, standalone, open: () => setOpen(true) }), [platform, standalone]);
 
   const notNow = () => {
-    write(() => localStorage, DISMISS_KEY, String(Date.now()));
+    storageSet(() => localStorage, DISMISS_KEY, String(Date.now()));
     setOpen(false);
   };
 

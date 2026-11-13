@@ -18,7 +18,7 @@ import { isExpenseArchived } from "@/lib/server/expense-archived";
 import { getExpense, type ExpenseDetail } from "@/lib/server/expenses";
 import { orNotFound } from "@/lib/server/page";
 import { cn } from "@/lib/utils/cn";
-import { displayName } from "@/lib/utils/person";
+import { displayName, personName } from "@/lib/utils/person";
 
 type Props = { params: Promise<{ id: string }> };
 
@@ -61,7 +61,6 @@ export default async function ExpensePage({ params }: Props) {
   const { user, expense: e, archived } = await loadExpense(id);
   const ctx = contextOf(e);
 
-  const nameOf = (person: { id: string; name: string; status?: string | null }) => (person.id === user.id ? "You" : displayName(person));
   const paidByMe = e.paidBy.id === user.id;
   const myShare = e.shares.find((s) => s.user.id === user.id)?.amountCents ?? 0;
   const stake = paidByMe ? e.amountCents - myShare : -myShare;
@@ -77,7 +76,7 @@ export default async function ExpensePage({ params }: Props) {
   const payerInSplit = rows.some((s) => s.user.id === e.paidBy.id);
 
   const edited = new Date(e.updatedAt).getTime() - new Date(e.createdAt).getTime() > 60_000;
-  const addedBy = e.createdBy.id === user.id ? "you" : displayName(e.createdBy);
+  const addedBy = personName(e.createdBy, user.id);
 
   return (
     <div className="max-w-[720px]">
@@ -96,7 +95,7 @@ export default async function ExpensePage({ params }: Props) {
 
       <Panel>
         <p className="text-body-sm text-ink-muted">{paidByMe ? "You paid" : `${displayName(e.paidBy)} paid`}</p>
-        <p className="mt-1 text-hero leading-none">
+        <p className="mt-1 min-w-0 text-[clamp(1.75rem,9vw,2.5rem)] leading-none [overflow-wrap:anywhere] md:text-hero">
           <Money cents={e.amountCents} currency={e.currency} className="hero-figure" />
         </p>
         <p
@@ -124,7 +123,7 @@ export default async function ExpensePage({ params }: Props) {
           </div>
           <div className="min-w-0">
             <dt className="text-meta text-ink-muted">Paid by</dt>
-            <dd className="truncate font-medium">{nameOf(e.paidBy)}</dd>
+            <dd className="truncate font-medium">{personName(e.paidBy, user.id, true)}</dd>
           </div>
           <div className="min-w-0">
             <dt className="text-meta text-ink-muted">{ctx.label}</dt>
@@ -163,7 +162,7 @@ export default async function ExpensePage({ params }: Props) {
             <li>
               <LedgerRow
                 leading={<Avatar id={e.paidBy.id} name={e.paidBy.name} size={40} />}
-                title={nameOf(e.paidBy)}
+                title={personName(e.paidBy, user.id, true)}
                 meta={`Paid ${formatMoney(e.amountCents, e.currency)}`}
                 trailing={<span className="text-meta text-ink-muted">not in the split</span>}
               />
@@ -182,7 +181,7 @@ export default async function ExpensePage({ params }: Props) {
               <li key={s.user.id}>
                 <LedgerRow
                   leading={<Avatar id={s.user.id} name={s.user.name} size={40} />}
-                  title={nameOf(s.user)}
+                  title={personName(s.user, user.id, true)}
                   meta={meta || undefined}
                   trailing={
                     <span className="flex flex-col items-end leading-tight">

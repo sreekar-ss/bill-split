@@ -6,7 +6,7 @@ import { updatePaymentHandlesAction } from "@/app/actions/account";
 import { useFocusFirstError } from "@/components/auth/use-focus-first-error";
 import { Button } from "@/components/ui/button";
 import { Field, FormError, Input } from "@/components/ui/field";
-import { runAction } from "@/lib/client/run-action";
+import { runAction, splitFailure, type ActionFailure } from "@/lib/client/run-action";
 
 type Key = "venmoHandle" | "paypalMe" | "cashTag" | "upiId";
 type Handles = Record<Key, string>;
@@ -54,7 +54,7 @@ export function PaymentHandlesForm({ initial }: { initial: Handles }) {
   const [saved, setSaved] = useState(initial);
   const [values, setValues] = useState(initial);
   const [pending, startTransition] = useTransition();
-  const [failure, setFailure] = useState<{ error: string; fieldErrors: Record<string, string> } | null>(null);
+  const [failure, setFailure] = useState<ActionFailure | null>(null);
   const formRef = useFocusFirstError(failure);
   const next = normalise(values);
   const dirty = FIELDS.some(({ key }) => next[key] !== saved[key]);
@@ -70,13 +70,12 @@ export function PaymentHandlesForm({ initial }: { initial: Handles }) {
         setValues(submitted);
         toast.success("Payment details saved");
       } else {
-        setFailure({ error: result.error, fieldErrors: result.fieldErrors ?? {} });
+        setFailure(result);
       }
     });
   }
 
-  const fieldErrors = failure?.fieldErrors ?? {};
-  const formError = failure && Object.keys(fieldErrors).length === 0 ? failure.error : null;
+  const { fieldErrors, formError } = splitFailure(failure);
 
   return (
     <form ref={formRef} onSubmit={onSubmit} noValidate className="space-y-4">

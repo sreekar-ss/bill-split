@@ -29,7 +29,7 @@ export async function updatePaymentHandlesAction(input: { venmoHandle?: string; 
   });
 }
 
-/** Re-sends the verification link. `data.sent` is false when throttled (try again in a minute). */
+/** Re-sends the verification link. `data.sent` is false when throttled (a 60s cooldown and a daily cap). */
 export async function resendVerificationAction() {
   return authed(async (user) => ({ sent: await sendVerificationEmail(user.id) }));
 }

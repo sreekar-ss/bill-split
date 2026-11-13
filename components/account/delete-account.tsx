@@ -88,13 +88,13 @@ export function DeleteAccountButton() {
                   />
                 )}
               </Field>
-              <div className="flex justify-end gap-2">
+              <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
                 <AlertDialog.Cancel asChild>
-                  <Button variant="secondary" disabled={pending}>
+                  <Button variant="secondary" className="w-full sm:w-auto" disabled={pending}>
                     Cancel
                   </Button>
                 </AlertDialog.Cancel>
-                <Button type="submit" variant="danger" disabled={pending || !password}>
+                <Button type="submit" variant="danger" className="w-full sm:w-auto" disabled={pending || !password}>
                   {pending ? "Deleting account…" : "Delete account"}
                 </Button>
               </div>

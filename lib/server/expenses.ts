@@ -6,7 +6,7 @@ import { expenseSchema, type ExpenseInput } from "@/lib/validation";
 import { db } from "./db";
 import { AppError, notFound } from "./errors";
 import { areFriends } from "./friends";
-import { assertNotArchived } from "./groups";
+import { throwIfArchived } from "./groups";
 import { parse } from "./parse";
 
 type ParsedExpense = ReturnType<typeof expenseSchema.parse>;
@@ -19,9 +19,7 @@ async function resolveContext(userId: string, data: Pick<ParsedExpense, "groupId
       select: { currency: true, archivedAt: true, members: { select: { userId: true } } },
     });
     if (!group) throw notFound("group");
-    if (group.archivedAt) {
-      throw new AppError("This group is archived. Unarchive it in the group's settings to add or change expenses.", "CONFLICT");
-    }
+    throwIfArchived(group.archivedAt);
     return { participants: group.members.map((m) => m.userId), currency: group.currency, direct: false };
   }
   const friendId = data.friendId!;
@@ -76,21 +74,30 @@ export interface ExpenseOrigin {
 }
 
 export async function createExpense(userId: string, input: ExpenseInput | unknown, origin: ExpenseOrigin = {}) {
+  const { id, groupId } = await saveExpense(userId, input, origin);
+  return { id, groupId };
+}
+
+/**
+ * createExpense, plus whether this call saved it: `created` is false when the clientId was already
+ * used (an idempotent re-send), so callers notify people only once.
+ */
+export async function saveExpense(userId: string, input: ExpenseInput | unknown, origin: ExpenseOrigin = {}) {
   const data = parse(expenseSchema, input);
   // Idempotent re-send (offline queue, double tap): the same clientId returns the expense already saved.
   if (data.clientId) {
     const existing = await findByClientId(userId, data.clientId);
-    if (existing) return existing;
+    if (existing) return { ...existing, created: false };
   }
   const ctx = await resolveContext(userId, data);
   const rows = buildShares(data, ctx.participants, ctx.direct);
   try {
-    return await insertExpense();
+    return { ...(await insertExpense()), created: true };
   } catch (error) {
     // Two sends racing with the same clientId: the loser returns the winner's expense.
     const duplicate = typeof error === "object" && error !== null && (error as { code?: string }).code === "P2002";
     const winner = duplicate && data.clientId ? await findByClientId(userId, data.clientId) : null;
-    if (winner) return winner;
+    if (winner) return { ...winner, created: false };
     throw error;
   }
 
@@ -135,7 +142,7 @@ async function loadAuthorized(userId: string, expenseId: string) {
       },
       paidBy: { select: { id: true, name: true, email: true, status: true } },
       createdBy: { select: { id: true, name: true, status: true } },
-      group: { select: { id: true, name: true, currency: true, members: { select: { userId: true } } } },
+      group: { select: { id: true, name: true, currency: true, archivedAt: true, members: { select: { userId: true } } } },
     },
   });
   if (!expense) throw notFound("expense");
@@ -255,7 +262,15 @@ function assertFormerMembersUnchanged(
 
 export async function deleteExpense(userId: string, expenseId: string) {
   const e = await loadAuthorized(userId, expenseId);
-  if (e.groupId) await assertNotArchived(e.groupId);
+  if (e.group) {
+    throwIfArchived(e.group.archivedAt);
+    // Like updateExpense: someone who has left can't be settled with, so deleting must not change their balance.
+    const current = new Set(e.group.members.map((m) => m.userId));
+    const former = [...new Set([e.paidById, ...e.splits.map((s) => s.userId)])].filter((id) => !current.has(id));
+    if (former.some((id) => netEffect(id, e) !== 0)) {
+      throw new AppError("Someone on this expense has left the group, so it can't be deleted. Ask them to rejoin first.", "CONFLICT");
+    }
+  }
   await db.expense.delete({ where: { id: expenseId } });
   return { groupId: e.groupId, friendId: e.group ? undefined : e.splits.find((s) => s.userId !== userId)?.userId };
 }

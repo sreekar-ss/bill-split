@@ -7,7 +7,7 @@ import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Panel } from "@/components/ui/page";
 import { getCurrentUser } from "@/lib/auth/session";
-import { getInvitePreview, INVALID_INVITE } from "@/lib/server/invites";
+import { ARCHIVED_INVITE, getInvitePreview, INVALID_INVITE } from "@/lib/server/invites";
 import { JoinButton } from "./join-button";
 
 type Props = { params: Promise<{ token: string }> };
@@ -52,6 +52,19 @@ export default async function JoinPage({ params }: Props) {
         <div className="mt-6">{groupCard}</div>
         <Button asChild size="lg" className="mt-6 w-full">
           <Link href={`/groups/${preview.groupId}`}>Open group</Link>
+        </Button>
+      </>
+    );
+  }
+
+  if (preview.archived) {
+    return (
+      <>
+        <h1 className="text-heading font-bold">You can&apos;t join {preview.name} right now</h1>
+        <p className="mt-2 text-body-sm text-ink-muted">{ARCHIVED_INVITE}</p>
+        <div className="mt-6">{groupCard}</div>
+        <Button asChild variant="secondary" size="lg" className="mt-6 w-full">
+          <Link href={user ? "/home" : "/"}>Go to BillSplit</Link>
         </Button>
       </>
     );

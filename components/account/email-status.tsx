@@ -32,7 +32,7 @@ export function EmailStatus({ verified, email }: { verified: boolean; email: str
         // Confirmed by the live text below (it stays on screen, unlike a toast), so one announcement, not two.
         setSent(true);
       } else {
-        toast.error("We sent a link a moment ago. Wait a minute, then try again.");
+        toast.error("We already sent you a link. Check your inbox and spam folder, or try again later.");
       }
     });
   }

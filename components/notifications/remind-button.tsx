@@ -50,7 +50,8 @@ function subscribe(onChange: () => void) {
 }
 
 /**
- * "Remind": emails a nudge to someone who owes you, then shows "Reminded" for the rest of the session.
+ * "Remind": sends a push nudge to someone who owes you (email only as a fallback when no device gets it),
+ * then shows "Reminded" for the rest of the session.
  * The server's cooldown is per person (across groups and direct), so "Reminded" is too.
  */
 export function RemindButton({ toUserId, toName, groupId, friendId, className }: RemindButtonProps) {
@@ -61,7 +62,7 @@ export function RemindButton({ toUserId, toName, groupId, friendId, className }:
     () => false,
   );
   const [pending, startTransition] = useTransition();
-  // Sent, but they can't get email: nothing was delivered, so don't claim "Reminded".
+  // Sent, but no push device or email reached them: nothing was delivered, so don't claim "Reminded".
   const [undelivered, setUndelivered] = useState(false);
   // aria-disabled (not disabled) keeps focus on the button while it sends and after it flips to "Reminded".
   const inactive = pending || reminded || undelivered;
@@ -79,7 +80,7 @@ export function RemindButton({ toUserId, toName, groupId, friendId, className }:
         toast.success(`Reminder sent to ${toName}`);
       } else {
         setUndelivered(true);
-        toast(`${toName} has reminders turned off or hasn't confirmed their email, so we couldn't email them.`);
+        toast(`${toName} has reminders turned off, or has no notifications on and no confirmed email, so we couldn't reach them.`);
       }
     });
   }
@@ -92,14 +93,14 @@ export function RemindButton({ toUserId, toName, groupId, friendId, className }:
       onClick={remind}
       aria-disabled={inactive || undefined}
       aria-label={
-        reminded ? `Reminded ${toName}` : undelivered ? `Couldn't email ${toName}` : pending ? `Reminding ${toName}` : `Remind ${toName}`
+        reminded ? `Reminded ${toName}` : undelivered ? `Couldn't reach ${toName}` : pending ? `Reminding ${toName}` : `Remind ${toName}`
       }
       data-testid="remind-button"
       // Muted text (not opacity) keeps the lasting "Reminded" state above 4.5:1 in both themes.
       className={cn("h-11 aria-disabled:cursor-default aria-disabled:text-ink-muted aria-disabled:hover:bg-transparent", className)}
     >
       {undelivered ? (
-        "Couldn't email"
+        "Couldn't reach"
       ) : reminded ? (
         <>
           <Check aria-hidden />

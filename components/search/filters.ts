@@ -1,5 +1,5 @@
 import { CATEGORY_LABELS, isCategory } from "@/components/expenses/categories";
-import { formatDay } from "@/lib/domain/dates";
+import { formatDay, fromDateInput } from "@/lib/domain/dates";
 import { centsToInput, parseAmountToCents, type Cents } from "@/lib/domain/money";
 import type { SearchFilters } from "@/lib/server/search";
 import type { ExpenseCategory } from "@/lib/validation";
@@ -41,7 +41,7 @@ function id(value: string | undefined) {
 }
 
 export function isIsoDate(value: string | undefined): value is string {
-  return Boolean(value && ISO_DATE.test(value) && !Number.isNaN(new Date(`${value}T12:00:00Z`).getTime()));
+  return Boolean(value && ISO_DATE.test(value) && !Number.isNaN(fromDateInput(value).getTime()));
 }
 
 function amount(value: string | undefined) {
@@ -125,7 +125,7 @@ export function describeFilters(
     out.push({ key: "friendId", label: name ? `With ${name}` : "With one friend" });
   }
   if (f.category) out.push({ key: "category", label: CATEGORY_LABELS[f.category] });
-  const day = (d: string) => formatDay(`${d}T12:00:00Z`, { month: "short", day: "numeric", year: "numeric" });
+  const day = (d: string) => formatDay(fromDateInput(d), { month: "short", day: "numeric", year: "numeric" });
   if (f.from) out.push({ key: "from", label: `From ${day(f.from)}` });
   if (f.to) out.push({ key: "to", label: `Until ${day(f.to)}` });
   if (f.paidBy) out.push({ key: "paidBy", label: f.paidBy === "me" ? "Paid by you" : "Paid by others" });

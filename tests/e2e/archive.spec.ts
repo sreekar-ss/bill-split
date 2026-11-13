@@ -1,5 +1,5 @@
 import { expect, test } from "./fixtures";
-import { addExpense, addMember, createGroup, dialog, expectToast, expenseLink, expenseSheet, setupGroup, settlePanel, shellAddExpense, signedIn } from "./helpers";
+import { addExpense, addMember, closeSheet, createGroup, dialog, expectToast, expenseLink, expenseSheet, setupGroup, settlePanel, shellAddExpense, signedIn } from "./helpers";
 
 test.describe("group emoji and archive", () => {
   test("set an emoji; archiving needs everyone settled; an archived group is read-only and moves under Archived; unarchive restores it", async ({ page, browser }, info) => {
@@ -17,7 +17,7 @@ test.describe("group emoji and archive", () => {
     await expect(beach).toBeChecked();
     await sheet.getByRole("button", { name: "Save changes" }).click();
     await expectToast(page, "Changes saved");
-    await sheet.getByRole("button", { name: "Close" }).click();
+    await closeSheet(sheet);
     await expect(page.getByRole("heading", { level: 1, name: "Lisbon trip" })).toContainText("🏖️");
 
     await page.goto("/groups");
@@ -33,7 +33,7 @@ test.describe("group emoji and archive", () => {
     const archiveButton = sheet.getByRole("button", { name: "Archive group" });
     await expect(archiveButton).toBeDisabled();
     await expect(archiveButton).toHaveAccessibleDescription("Settle up everyone first. Then you can archive the group.");
-    await sheet.getByRole("button", { name: "Close" }).click();
+    await closeSheet(sheet);
     await expect(sheet).toBeHidden();
 
     // Ben pays Ana back; now it can be archived.

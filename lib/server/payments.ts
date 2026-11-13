@@ -4,7 +4,7 @@ import { paymentSchema } from "@/lib/validation";
 import { db } from "./db";
 import { AppError, notFound } from "./errors";
 import { areFriends } from "./friends";
-import { assertNotArchived } from "./groups";
+import { throwIfArchived } from "./groups";
 import { parse } from "./parse";
 
 /** Record that `fromUserId` paid `toUserId`. Partial amounts are fine; balances are derived. */
@@ -15,10 +15,10 @@ export async function recordPayment(userId: string, input: unknown) {
   if (data.groupId) {
     const group = await db.group.findFirst({
       where: { id: data.groupId, members: { some: { userId } } },
-      select: { currency: true, members: { select: { userId: true } } },
+      select: { currency: true, archivedAt: true, members: { select: { userId: true } } },
     });
     if (!group) throw notFound("group");
-    await assertNotArchived(data.groupId);
+    throwIfArchived(group.archivedAt);
     const ids = new Set(group.members.map((m) => m.userId));
     if (!ids.has(data.fromUserId) || !ids.has(data.toUserId)) {
       throw new AppError("Both people must be members of this group.", "VALIDATION");
@@ -57,12 +57,19 @@ export async function recordPayment(userId: string, input: unknown) {
 export async function deletePayment(userId: string, paymentId: string) {
   const p = await db.settlement.findUnique({
     where: { id: paymentId },
-    select: { id: true, groupId: true, fromUserId: true, toUserId: true, group: { select: { members: { select: { userId: true } } } } },
+    select: { id: true, groupId: true, fromUserId: true, toUserId: true, group: { select: { archivedAt: true, members: { select: { userId: true } } } } },
   });
   if (!p) throw notFound("payment");
   const allowed = p.group ? p.group.members.some((m) => m.userId === userId) : p.fromUserId === userId || p.toUserId === userId;
   if (!allowed) throw notFound("payment");
-  if (p.groupId) await assertNotArchived(p.groupId);
+  if (p.group) {
+    throwIfArchived(p.group.archivedAt);
+    // Deleting it would hand someone who has left a balance they can no longer settle (see deleteExpense).
+    const current = new Set(p.group.members.map((m) => m.userId));
+    if (!current.has(p.fromUserId) || !current.has(p.toUserId)) {
+      throw new AppError("Someone on this payment has left the group, so it can't be deleted. Ask them to rejoin first.", "CONFLICT");
+    }
+  }
   await db.settlement.delete({ where: { id: paymentId } });
   return { groupId: p.groupId, friendId: p.groupId ? undefined : p.fromUserId === userId ? p.toUserId : p.fromUserId };
 }

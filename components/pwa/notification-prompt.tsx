@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Sheet } from "@/components/ui/sheet";
+import { afterDelayWhenIdle, INSTALL_SHOWN_KEY, storageGet, storageSet } from "@/lib/pwa/prompt-storage";
 import { currentSubscription, enablePush, pushSupported } from "@/lib/pwa/push-client";
 
 /**
@@ -15,24 +16,8 @@ import { currentSubscription, enablePush, pushSupported } from "@/lib/pwa/push-c
  */
 const DISMISS_KEY = "bs-notify-dismissed-at";
 const SHOWN_KEY = "bs-notify-shown";
-const INSTALL_SHOWN_KEY = "bs-install-shown";
 const DISMISS_DAYS = 14;
 const DELAY_MS = 6000;
-
-const get = (s: () => Storage, k: string) => {
-  try {
-    return s().getItem(k);
-  } catch {
-    return null;
-  }
-};
-const set = (s: () => Storage, k: string, v: string) => {
-  try {
-    s().setItem(k, v);
-  } catch {
-    /* private mode */
-  }
-};
 
 export function NotificationPrompt({ publicKey, engaged }: { publicKey: string | null; engaged: boolean }) {
   const [open, setOpen] = useState(false);
@@ -41,26 +26,26 @@ export function NotificationPrompt({ publicKey, engaged }: { publicKey: string |
   useEffect(() => {
     if (!publicKey || !engaged || !pushSupported()) return;
     if (Notification.permission === "denied") return;
-    const dismissed = Number(get(() => localStorage, DISMISS_KEY)) || 0;
+    const dismissed = Number(storageGet(() => localStorage, DISMISS_KEY)) || 0;
     if (dismissed && Date.now() - dismissed < DISMISS_DAYS * 86400000) return;
-    if (get(() => sessionStorage, SHOWN_KEY) === "1") return;
+    if (storageGet(() => sessionStorage, SHOWN_KEY) === "1") return;
     let cancelled = false;
-    const timer = window.setTimeout(async () => {
+    const cancelTimer = afterDelayWhenIdle(async () => {
       // Don't stack prompts: the install prompt had this session.
-      if (cancelled || get(() => sessionStorage, INSTALL_SHOWN_KEY) === "1") return;
+      if (cancelled || storageGet(() => sessionStorage, INSTALL_SHOWN_KEY) === "1") return;
       const sub = await currentSubscription().catch(() => null);
       if (cancelled || sub) return;
-      set(() => sessionStorage, SHOWN_KEY, "1");
+      storageSet(() => sessionStorage, SHOWN_KEY, "1");
       setOpen(true);
     }, DELAY_MS);
     return () => {
       cancelled = true;
-      window.clearTimeout(timer);
+      cancelTimer();
     };
   }, [publicKey, engaged]);
 
   const notNow = () => {
-    set(() => localStorage, DISMISS_KEY, String(Date.now()));
+    storageSet(() => localStorage, DISMISS_KEY, String(Date.now()));
     setOpen(false);
   };
 
@@ -72,7 +57,7 @@ export function NotificationPrompt({ publicKey, engaged }: { publicKey: string |
       setOpen(false);
       toast.success("Notifications on. You'll hear from BillSplit here.");
     } else if (res.reason === "denied") {
-      set(() => localStorage, DISMISS_KEY, String(Date.now()));
+      storageSet(() => localStorage, DISMISS_KEY, String(Date.now()));
       setOpen(false);
       toast("Notifications are blocked. You can allow them later in your device or browser settings.");
     } else if (res.reason === "error") {

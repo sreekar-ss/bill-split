@@ -17,8 +17,9 @@ export async function updateNotificationPrefsAction(input: {
 }
 
 /**
- * "Remind Ben": emails a nudge to someone who owes you in a group (groupId) or directly (friendId = toUserId).
- * data.delivered is false when they've turned reminders off or haven't confirmed their email.
+ * "Remind Ben": pushes a nudge to someone who owes you in a group (groupId) or directly (friendId = toUserId),
+ * with email only as a fallback. data.delivered is false when they've turned reminders off, or no device
+ * received the push and they have no confirmed email to fall back to.
  */
 export async function sendReminderAction(input: { toUserId: string; groupId?: string; friendId?: string }) {
   return authed((user) => sendReminder(user.id, input));

@@ -21,16 +21,16 @@ The v0.2 codebase had problems that features couldn't be layered on:
 | Money | Integer cents everywhere (`amountCents`) |
 | Ledger | Balances are **derived**: expense payer +amount, each share −share, payments shift balances. Nothing is "flagged settled". |
 | UI | Tailwind CSS 4 + shadcn/ui primitives (Radix) + lucide icons + sonner toasts. Design tokens in `DESIGN.md`. |
-| Validation | zod 4 at every action boundary |
+| Validation | zod 4 schemas (`lib/validation.ts`), parsed inside the `lib/server` services, so every caller is validated |
 | Tests | Vitest unit (domain math), Vitest integration (services against a real local Postgres), Playwright E2E (critical flows, mobile + desktop) |
-| Pipeline | `npm run pipeline` runs every gate in order: env-safety → typecheck → lint → unit → integration → build → e2e |
+| Pipeline | `npm run pipeline` runs every gate in order: env-safety → generate → typecheck → lint → unit → integration → build → e2e |
 
 Layering:
 ```
 app/(routes)           Server Components (read via services) + client islands
-app/**/actions.ts      Server Actions: auth → zod → service → revalidate
+app/actions/*.ts       Server Actions: authed() → service → revalidate (authed() in app/actions/run.ts)
 lib/domain/*           Pure TS: money, splits, ledger, simplify (no I/O, unit-tested)
-lib/server/*           Services: prisma queries + authorization (integration-tested)
+lib/server/*           Services: zod parsing + authorization + prisma queries (integration-tested)
 lib/auth/*             session cookie, password hashing, getCurrentUser
 ```
 
@@ -65,7 +65,7 @@ A new Prisma migration converts the existing data in place:
 - `ExpenseSplit.amount` becomes `amountCents` (Int).
 - `Settlement.amount` becomes `amountCents` (Int).
 
-Legacy columns that MVP1 doesn't use (`settled`, `paidAmount`, …) are left alone. The existing settlements stay valid under the derived ledger. **The production (Neon) database has not been migrated.** Run `prisma migrate deploy` on it deliberately when releasing.
+Legacy columns that MVP1 doesn't use (`settled`, `paidAmount`, …) are left alone. The existing settlements stay valid under the derived ledger. The production (Neon) database was migrated on release, 2026-11-12. Migrations now run on a deploy only when `MIGRATE_ON_BUILD=1` is set (see `scripts/vercel-build.mjs`).
 
 ## Orchestration
 Development is driven by a multi-agent workflow in phases:

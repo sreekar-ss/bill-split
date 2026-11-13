@@ -20,6 +20,17 @@ export async function assertGroupMember(groupId: string, userId: string) {
   return member;
 }
 
+/** Members who are the group's admin or created it. Throws NOT_FOUND for non-members and FORBIDDEN (with `message`) for everyone else. */
+export async function assertGroupAdmin(groupId: string, userId: string, message: string) {
+  const member = await db.groupMember.findUnique({
+    where: { groupId_userId: { groupId, userId } },
+    select: { role: true, group: { select: { createdById: true } } },
+  });
+  if (!member) throw notFound("group");
+  if (member.role !== "admin" && member.group.createdById !== userId) throw forbidden(message);
+  return member;
+}
+
 export async function listGroups(userId: string) {
   const memberships = await db.groupMember.findMany({
     where: { userId },
@@ -233,18 +244,24 @@ export async function unarchiveGroup(userId: string, groupId: string) {
   await db.group.update({ where: { id: groupId }, data: { archivedAt: null } });
 }
 
+export const ARCHIVED_MESSAGE = "This group is archived. Unarchive it in the group's settings to make changes.";
+
+/** For callers that already loaded the group: throws when it's archived (it's read-only until unarchived). */
+export function throwIfArchived(archivedAt: Date | null) {
+  if (archivedAt) throw new AppError(ARCHIVED_MESSAGE, "CONFLICT");
+}
+
 /** Throws when a group is archived (it's read-only until unarchived). */
 export async function assertNotArchived(groupId: string) {
   const g = await db.group.findUnique({ where: { id: groupId }, select: { archivedAt: true } });
-  if (g?.archivedAt) {
-    throw new AppError("This group is archived. Unarchive it in the group's settings to make changes.", "CONFLICT");
-  }
+  throwIfArchived(g?.archivedAt ?? null);
 }
 
 export const CURRENCY_LOCKED = "The currency can't change once the group has expenses or payments.";
 
 export async function addMemberByEmail(userId: string, groupId: string, input: unknown) {
   await assertGroupMember(groupId, userId);
+  await assertNotArchived(groupId);
   const result = await db.$transaction(async (tx) => {
     const { user: invitee, created } = await findOrCreateInvitee(tx, input, userId);
     const existing = await tx.groupMember.findUnique({ where: { groupId_userId: { groupId, userId: invitee.id } } });
@@ -267,13 +284,10 @@ export async function addMemberByEmail(userId: string, groupId: string, input: u
 
 /** Remove a member (or leave, when memberId === userId). Only allowed when their balance is settled. */
 export async function removeMember(userId: string, groupId: string, memberId: string) {
-  const me = await assertGroupMember(groupId, userId);
-  await assertNotArchived(groupId);
-  const group = await db.group.findUniqueOrThrow({ where: { id: groupId }, select: { createdById: true } });
   const leaving = memberId === userId;
-  if (!leaving && me.role !== "admin" && group.createdById !== userId) {
-    throw forbidden("Only the group's admin can remove other members.");
-  }
+  if (leaving) await assertGroupMember(groupId, userId);
+  else await assertGroupAdmin(groupId, userId, "Only the group's admin can remove other members.");
+  await assertNotArchived(groupId);
   const target = await db.groupMember.findUnique({
     where: { groupId_userId: { groupId, userId: memberId } },
     select: { user: { select: { name: true } } },
@@ -298,9 +312,7 @@ export async function removeMember(userId: string, groupId: string, memberId: st
 }
 
 export async function deleteGroup(userId: string, groupId: string) {
-  const me = await assertGroupMember(groupId, userId);
-  const group = await db.group.findUniqueOrThrow({ where: { id: groupId }, select: { createdById: true } });
-  if (me.role !== "admin" && group.createdById !== userId) throw forbidden("Only the group's admin can delete it.");
+  await assertGroupAdmin(groupId, userId, "Only the group's admin can delete it.");
   // Deleting removes every expense and payment with it, so it would wipe out what people are owed.
   const { nets } = await loadGroupLedger(groupId);
   if ([...nets.values()].some((cents) => cents !== 0)) {

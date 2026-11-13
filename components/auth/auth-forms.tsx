@@ -3,20 +3,12 @@
 import { MailCheck } from "lucide-react";
 import Link from "next/link";
 import { useActionState, useState, useTransition } from "react";
-import { loginAction, registerAction, resendInviteAction, type AuthFormState } from "@/app/actions/auth";
+import { loginAction, registerAction, resendInviteAction } from "@/app/actions/auth";
 import { Button } from "@/components/ui/button";
 import { Field, FormError, Input } from "@/components/ui/field";
-import { runAction } from "@/lib/client/run-action";
+import { runAction, splitFailure } from "@/lib/client/run-action";
 import { PasswordInput } from "./password-input";
 import { useFocusFirstError } from "./use-focus-first-error";
-
-function failure(state: AuthFormState) {
-  if (!state || state.ok) return { fieldErrors: {} as Record<string, string>, formError: null };
-  // Errors without fieldErrors (e.g. RATE_LIMITED lockouts) come back as the form-level message.
-  const fieldErrors = state.fieldErrors ?? {};
-  // Validation errors repeat the first field message; only show the banner when no field explains it.
-  return { fieldErrors, formError: Object.keys(fieldErrors).length > 0 ? null : state.error };
-}
 
 function FormBanner({ message }: { message: string | null }) {
   if (!message) return null;
@@ -37,7 +29,7 @@ export function LoginForm({ next }: { next?: string }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const formRef = useFocusFirstError(state);
-  const { fieldErrors, formError } = failure(state);
+  const { fieldErrors, formError } = splitFailure(state);
 
   return (
     <form ref={formRef} action={formAction} noValidate className="space-y-4">
@@ -94,7 +86,7 @@ export function RegisterForm({ next }: { next?: string }) {
   // The email the last submit used, so "Email me the invite again" targets what the server checked.
   const [submittedEmail, setSubmittedEmail] = useState("");
   const formRef = useFocusFirstError(state);
-  const { fieldErrors, formError } = failure(state);
+  const { fieldErrors, formError } = splitFailure(state);
   const invitePending = fieldErrors.invite === "pending" && email.trim() === submittedEmail;
 
   return (

@@ -105,6 +105,11 @@ export async function expectToast(page: Page, text: string) {
   await expect(page.locator("[data-sonner-toast]").filter({ hasText: text }).first()).toBeVisible();
 }
 
+/** Closes a sheet with its visible close control: "Close" (X), or "Back" where it is a full screen on phones. */
+export async function closeSheet(sheet: Locator) {
+  await sheet.getByRole("button", { name: /^(Close|Back)$/ }).filter({ visible: true }).first().click();
+}
+
 export function dialog(page: Page, name?: string | RegExp): Locator {
   return name ? page.getByRole("dialog", { name }) : page.getByRole("dialog");
 }

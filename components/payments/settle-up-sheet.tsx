@@ -15,7 +15,7 @@ import { paymentLinks, type PaymentHandles } from "@/lib/domain/payment-links";
 import { cn } from "@/lib/utils/cn";
 import type { PaymentInput } from "@/lib/validation";
 import { runAction } from "@/lib/client/run-action";
-import { displayName, isInvited, type PersonStatus } from "@/lib/utils/person";
+import { displayName, isInvited, personName, type PersonStatus } from "@/lib/utils/person";
 
 /**
  * Someone who can pay or receive. `status` and the payment handles are optional so older callers
@@ -101,9 +101,8 @@ function SettleUpForm({
 
   const personOf = (id: string) => people.find((p) => p.id === id);
   const nameOf = (id: string, start: boolean) => {
-    if (id === meId) return start ? "You" : "you";
     const person = personOf(id);
-    return person ? displayName(person) : "Someone";
+    return person ? personName(person, meId, start) : "Someone";
   };
   const optionLabel = (p: SettleUpPerson) => (p.id === meId ? "You" : displayName(p));
 

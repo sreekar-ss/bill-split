@@ -1,7 +1,7 @@
 import "server-only";
 import { fromDateInput, toDateInput } from "@/lib/domain/dates";
 import type { Cents } from "@/lib/domain/money";
-import { displayName } from "@/lib/utils/person";
+import { personName } from "@/lib/utils/person";
 import { canViewGroup } from "./access";
 import { db } from "./db";
 import { notFound } from "./errors";
@@ -11,12 +11,6 @@ import { notFound } from "./errors";
  * paid for others. Payments are settling up, not spending, so they're excluded. Grouped per
  * currency (amounts in different currencies are never added together).
  */
-
-export interface MonthPoint {
-  /** yyyy-mm */
-  month: string;
-  cents: Cents;
-}
 
 function monthsBack(today: string, months: number): string[] {
   const [y, m] = today.split("-").map(Number);
@@ -75,7 +69,6 @@ export async function getPersonalInsights(userId: string, { months = 6, today = 
       })),
   };
 }
-export type PersonalInsights = Awaited<ReturnType<typeof getPersonalInsights>>;
 
 /** A group's total spending by month, category and person (what each person paid and consumed). */
 export async function getGroupInsights(userId: string, groupId: string, { months = 6, today = toDateInput(new Date()) } = {}) {
@@ -97,7 +90,7 @@ export async function getGroupInsights(userId: string, groupId: string, { months
   const people = new Map<string, { name: string; paidCents: Cents; shareCents: Cents }>();
   const person = (u: { id: string; name: string; status: string }) => {
     let p = people.get(u.id);
-    if (!p) people.set(u.id, (p = { name: u.id === userId ? "You" : displayName(u), paidCents: 0, shareCents: 0 }));
+    if (!p) people.set(u.id, (p = { name: personName(u, userId, true), paidCents: 0, shareCents: 0 }));
     return p;
   };
   let total = 0;
@@ -120,4 +113,3 @@ export async function getGroupInsights(userId: string, groupId: string, { months
     byPerson: [...people].map(([id, p]) => ({ id, ...p })).sort((a, b) => b.shareCents - a.shareCents),
   };
 }
-export type GroupInsights = Awaited<ReturnType<typeof getGroupInsights>>;

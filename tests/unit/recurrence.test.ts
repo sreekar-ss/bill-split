@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { anchorFor, describeSchedule, endsOnTooSoon, firstRepeatOn, nextOccurrence, occurrencesBetween } from "@/lib/domain/recurrence";
+import { anchorFor, describeSchedule, endsOnTooSoon, firstRepeatOn, nextOccurrence } from "@/lib/domain/recurrence";
 
 describe("weekly", () => {
   const mondays = { frequency: "weekly" as const, interval: 1, anchorDay: 1 };
@@ -35,12 +35,6 @@ describe("helpers", () => {
   it("derives anchors from a start date", () => {
     expect(anchorFor("weekly", "2026-11-16")).toBe(1);
     expect(anchorFor("monthly", "2026-11-30")).toBe(30);
-  });
-  it("lists catch-up occurrences with a cap", () => {
-    const s = { frequency: "weekly" as const, interval: 1, anchorDay: 5 };
-    expect(occurrencesBetween(s, "2026-11-13", "2026-12-04")).toEqual(["2026-11-20", "2026-11-27", "2026-12-04"]);
-    expect(occurrencesBetween(s, "2020-01-01", "2026-12-04", 5)).toHaveLength(5);
-    expect(occurrencesBetween(s, "2026-11-13", "2026-11-19")).toEqual([]);
   });
   it("describes schedules in words", () => {
     expect(describeSchedule({ frequency: "weekly", interval: 1, anchorDay: 1 })).toBe("Every Monday");

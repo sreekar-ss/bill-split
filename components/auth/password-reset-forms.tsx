@@ -3,23 +3,18 @@
 import { MailCheck } from "lucide-react";
 import Link from "next/link";
 import { useActionState, useState } from "react";
-import { forgotPasswordAction, resetPasswordAction, type AuthFormState } from "@/app/actions/auth";
+import { forgotPasswordAction, resetPasswordAction } from "@/app/actions/auth";
 import { Button } from "@/components/ui/button";
 import { Field, FormError, Input } from "@/components/ui/field";
+import { splitFailure } from "@/lib/client/run-action";
 import { PasswordInput } from "./password-input";
 import { useFocusFirstError } from "./use-focus-first-error";
-
-function failure(state: AuthFormState) {
-  if (!state || state.ok) return { fieldErrors: {} as Record<string, string>, formError: null };
-  const fieldErrors = state.fieldErrors ?? {};
-  return { fieldErrors, formError: Object.keys(fieldErrors).some((k) => k !== "token") ? null : state.error };
-}
 
 export function ForgotPasswordForm({ defaultEmail = "" }: { defaultEmail?: string }) {
   const [state, formAction, pending] = useActionState(forgotPasswordAction, null);
   const [email, setEmail] = useState(defaultEmail);
   const formRef = useFocusFirstError(state && !state.ok ? state : null);
-  const { fieldErrors, formError } = failure(state);
+  const { fieldErrors, formError } = splitFailure(state, ["token"]);
 
   if (state?.ok) {
     return (
@@ -74,7 +69,7 @@ export function ResetPasswordForm({ token }: { token: string }) {
   const [confirm, setConfirm] = useState("");
   const [confirmError, setConfirmError] = useState<string | null>(null);
   const formRef = useFocusFirstError(state && !state.ok ? state : confirmError);
-  const { fieldErrors, formError } = failure(state);
+  const { fieldErrors, formError } = splitFailure(state, ["token"]);
   const expired = Boolean(state && !state.ok && state.fieldErrors?.token);
 
   if (expired) return <ResetLinkExpired />;

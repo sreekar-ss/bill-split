@@ -14,7 +14,7 @@ import { buttonVariants } from "@/components/ui/button";
 import { PageHeader, Section } from "@/components/ui/page";
 import { requireUser } from "@/lib/auth/session";
 import { formatMoney } from "@/lib/domain/money";
-import { displayName } from "@/lib/utils/person";
+import { displayName, personName } from "@/lib/utils/person";
 import { getGroup } from "@/lib/server/groups";
 import { orNotFound } from "@/lib/server/page";
 import { listRecurring } from "@/lib/server/recurring";
@@ -57,7 +57,7 @@ export default async function GroupPage({ params }: Props) {
   // Viewer first, so the subtitle reads "You, Ben (invited) and Chloe".
   const names = [...group.members]
     .sort((a, b) => Number(b.id === meId) - Number(a.id === meId))
-    .map((m) => (m.id === meId ? "You" : displayName(m)));
+    .map((m) => personName(m, meId, true));
 
   const beam: BeamRow[] = group.members.map((m) =>
     m.id === meId

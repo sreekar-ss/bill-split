@@ -102,8 +102,8 @@ test.describe("reminders", () => {
     const plan = settlePanel(page);
     const before = mailsTo(ben.email).length;
     await plan.getByRole("button", { name: "Remind Ben", exact: true }).click();
-    await expectToast(page, "Ben has reminders turned off or hasn't confirmed their email, so we couldn't email them.");
-    await expect(plan.getByRole("button", { name: "Couldn't email Ben" })).toBeVisible();
+    await expectToast(page, "Ben has reminders turned off, or has no notifications on and no confirmed email, so we couldn't reach them.");
+    await expect(plan.getByRole("button", { name: "Couldn't reach Ben" })).toBeVisible();
     await expect(plan.getByRole("button", { name: "Reminded Ben" })).toHaveCount(0);
     expect(mailsTo(ben.email).slice(before).filter((m) => m.subject.startsWith("Reminder from"))).toHaveLength(0);
   });

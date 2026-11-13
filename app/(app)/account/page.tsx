@@ -60,25 +60,23 @@ export default async function AccountPage() {
         </Section>
 
         {/* id: deep link from the /unsubscribe page and emails ("turn them back on in Account"). */}
-        <div id="notifications" className="scroll-mt-6">
-          <Section title="Notifications">
-            {pushKey ? (
-              <div className="mb-6">
-                <PushSettings publicKey={pushKey} />
-              </div>
-            ) : null}
-            <NotificationSettings
-              email={profile.email}
-              emailVerified={profile.emailVerified}
-              initial={{
-                notifyExpenses: prefs.notifyExpenses,
-                notifyPayments: prefs.notifyPayments,
-                notifyReminders: prefs.notifyReminders,
-                weeklyDigest: prefs.weeklyDigest,
-              }}
-            />
-          </Section>
-        </div>
+        <Section id="notifications" title="Notifications" className="scroll-mt-6">
+          {pushKey ? (
+            <div className="mb-6">
+              <PushSettings publicKey={pushKey} />
+            </div>
+          ) : null}
+          <NotificationSettings
+            email={profile.email}
+            emailVerified={profile.emailVerified}
+            initial={{
+              notifyExpenses: prefs.notifyExpenses,
+              notifyPayments: prefs.notifyPayments,
+              notifyReminders: prefs.notifyReminders,
+              weeklyDigest: prefs.weeklyDigest,
+            }}
+          />
+        </Section>
 
         <Section title="Install the app">
           <InstallAppSection />

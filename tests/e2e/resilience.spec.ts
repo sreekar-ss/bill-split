@@ -1,5 +1,5 @@
 import { expect, test } from "./fixtures";
-import { addExpense, dialog, expectToast, expenseSheet, fillExpense, setupGroup, shellAddExpense, setupUsers } from "./helpers";
+import { addExpense, closeSheet, dialog, expectToast, expenseSheet, fillExpense, setupGroup, shellAddExpense, setupUsers } from "./helpers";
 
 test.describe("resilience and focus", () => {
   test("closing a sheet returns focus to the control that opened it", async ({ page, browser }, info) => {
@@ -25,7 +25,7 @@ test.describe("resilience and focus", () => {
 
     const settings = page.getByRole("button", { name: "Group settings" });
     await settings.click();
-    await dialog(page, "Group settings").getByRole("button", { name: "Close" }).click();
+    await closeSheet(dialog(page, "Group settings"));
     await expect(settings).toBeFocused();
   });
 

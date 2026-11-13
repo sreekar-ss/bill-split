@@ -35,12 +35,16 @@ export function ConfirmDialog({
           className="animate-sheet fixed left-1/2 top-1/2 z-50 w-[min(420px,calc(100vw-32px))] -translate-x-1/2 -translate-y-1/2 rounded-[20px] bg-surface p-5 text-ink shadow-lift">
           <AlertDialog.Title className="text-title font-bold">{title}</AlertDialog.Title>
           <AlertDialog.Description className="mt-2 text-body-sm text-ink-muted">{body}</AlertDialog.Description>
-          <div className="mt-5 flex justify-end gap-2">
+          {/* Stacked on phones (confirm on top, nearest the thumb); side by side from sm up. */}
+          <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
             <AlertDialog.Cancel asChild>
-              <Button variant="secondary">Cancel</Button>
+              <Button variant="secondary" className="w-full sm:w-auto">
+                Cancel
+              </Button>
             </AlertDialog.Cancel>
             <Button
               variant={tone === "danger" ? "danger" : "primary"}
+              className="w-full sm:w-auto"
               disabled={pending}
               onClick={(e) => {
                 e.preventDefault();

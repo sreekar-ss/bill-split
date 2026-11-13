@@ -8,6 +8,7 @@ import { ExpenseSheet } from "@/components/expenses/expense-sheet";
 import type { ExpenseDetail } from "@/lib/server/expenses";
 import type { ExpenseContexts } from "@/lib/server/groups";
 import { cn } from "@/lib/utils/cn";
+import { InstallAppProvider } from "@/components/pwa/install-app";
 import { AddExpenseContext, type AddExpensePreset } from "./add-expense-context";
 
 const NAV = [
@@ -41,6 +42,7 @@ export function AppShell({ contexts, children }: { contexts: ExpenseContexts; ch
 
   return (
     <AddExpenseContext.Provider value={api}>
+      <InstallAppProvider engaged={canAddExpense}>
       <a href="#main" className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-50 focus:rounded-[10px] focus:bg-surface focus:px-3 focus:py-2">
         Skip to content
       </a>
@@ -130,6 +132,7 @@ export function AppShell({ contexts, children }: { contexts: ExpenseContexts; ch
         preset={sheet.preset}
         editing={sheet.editing}
       />
+      </InstallAppProvider>
     </AddExpenseContext.Provider>
   );
 }

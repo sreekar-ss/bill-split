@@ -178,11 +178,11 @@ test.describe("invite links", () => {
     await devPage.getByRole("button", { name: "Join group" }).click();
     await expectToast(devPage, "You joined Lisbon trip");
     await expect(devPage.getByRole("heading", { level: 1, name: "Lisbon trip" })).toBeVisible();
-    await expect(devPage.getByText("3 members")).toBeVisible();
+    await expect(devPage.locator("#main").getByText("3 members")).toBeVisible();
 
     // Ana (an admin) resets the link: the old one stops working, members stay.
     await page.reload();
-    await expect(page.getByText("3 members")).toBeVisible();
+    await expect(page.locator("#main").getByText("3 members")).toBeVisible();
     await page.getByRole("button", { name: "Invite with a link" }).first().click();
     await expect(sheet.getByLabel("Invite link")).toHaveValue(link);
     await sheet.getByRole("button", { name: "Reset link" }).click();

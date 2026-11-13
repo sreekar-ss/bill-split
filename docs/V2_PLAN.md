@@ -22,6 +22,14 @@ MVP1 (live since 2026-11-12) lets people split costs with others who already hav
 | Weekly digest | Optional and off by default. A Monday summary of your balances. It's skipped when you're all settled up. |
 | Recurring expenses | Any expense can repeat weekly or monthly, with an end date or none. A daily Vercel Cron job creates the due expenses idempotently. Recurring expenses can be paused or stopped, and they're labelled on the ledger. |
 
+## Install as an app (shipped with Milestone B)
+- **Installable:** web app manifest, standalone display, iPhone home-screen settings, and the "Your slice" icon (docs/design/app-icon.svg). PNG and maskable icons are generated from one SVG.
+- **Install prompt:**
+  - iPhone: step-by-step Share → Add to Home Screen. iOS has no install API.
+  - Android Chrome: a real Install button.
+  - In-app browsers: "open in Safari" instead.
+  - It only opens by itself on phones, for users with a group or friend, once per session. "Not now" hides it for 30 days. It's always available from Account → Install the app.
+
 ## Milestone C — travel-ready
 | Feature | Scope |
 |---|---|

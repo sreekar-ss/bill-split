@@ -11,6 +11,7 @@ import { ProfileForm } from "@/components/account/profile-form";
 import { ThemePicker } from "@/components/account/theme-picker";
 import { Avatar } from "@/components/ui/avatar";
 import { buttonVariants } from "@/components/ui/button";
+import { InstallAppSection } from "@/components/pwa/install-app";
 import { PageHeader, Section } from "@/components/ui/page";
 import { requireUser } from "@/lib/auth/session";
 import { getNotificationPrefs } from "@/lib/server/notifications";
@@ -69,6 +70,10 @@ export default async function AccountPage() {
             />
           </Section>
         </div>
+
+        <Section title="Install the app">
+          <InstallAppSection />
+        </Section>
 
         <Section title="Theme">
           <ThemePicker />

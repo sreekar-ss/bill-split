@@ -8,11 +8,17 @@ const hanken = Hanken_Grotesk({ subsets: ["latin"], variable: "--font-hanken", d
 export const metadata: Metadata = {
   title: { default: "BillSplit", template: "%s · BillSplit" },
   description: "Split shared costs with friends and groups, and always know who owes what.",
+  applicationName: "BillSplit",
+  // Installed on an iPhone home screen: full screen, with the app's name under the icon.
+  appleWebApp: { capable: true, title: "BillSplit", statusBarStyle: "default" },
+  formatDetection: { telephone: false },
 };
 
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
+  // Lets the layout use env(safe-area-inset-*) around the notch and home indicator.
+  viewportFit: "cover",
   themeColor: [
     { media: "(prefers-color-scheme: light)", color: "#f2f5f1" },
     { media: "(prefers-color-scheme: dark)", color: "#0e1524" },

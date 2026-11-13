@@ -6,6 +6,8 @@ export interface Email {
   subject: string;
   text: string;
   html: string;
+  /** Extra headers, e.g. List-Unsubscribe for notifications. */
+  headers?: Record<string, string>;
 }
 
 /**
@@ -53,6 +55,7 @@ export async function sendEmail(email: Email): Promise<void> {
           subject: email.subject,
           text: email.text,
           html: email.html,
+          ...(email.headers ? { headers: email.headers } : {}),
         }),
       });
       if (!res.ok) throw new Error(`Resend rejected the email (${res.status}): ${(await res.text()).slice(0, 300)}`);

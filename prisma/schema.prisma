@@ -29,6 +29,12 @@ model User {
   paypalMe      String?
   cashTag       String?
   upiId         String?
+  // Email notification preferences (only confirmed emails are ever notified)
+  notifyExpenses  Boolean  @default(true)
+  notifyPayments  Boolean  @default(true)
+  notifyReminders Boolean  @default(true)
+  weeklyDigest    Boolean  @default(false)
+  lastDigestAt    DateTime?
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
@@ -40,6 +46,7 @@ model User {
   recordedSettlements Settlement[] @relation("SettlementRecorder")
   passwordResetTokens PasswordResetToken[]
   emailTokens       EmailToken[]
+  recurringExpenses RecurringExpense[] @relation("RecurringCreator")
   expenseSplits     ExpenseSplit[]
   paymentsFrom      Settlement[]  @relation("PaymentFrom")
   paymentsTo        Settlement[]  @relation("PaymentTo")
@@ -73,6 +80,7 @@ model Group {
   expenses  Expense[]
   settlements Settlement[]
   activities Activity[]
+  recurringExpenses RecurringExpense[]
 
   @@index([createdById])
 }
@@ -107,6 +115,9 @@ model Expense {
   groupId     String?  // null for direct expenses between two friends
   paidById    String
   createdById String
+  /// Set when created by a recurring schedule; recurrenceKey = "<recurringId>:<yyyy-mm-dd>" prevents duplicates.
+  recurringId   String?
+  recurrenceKey String?  @unique
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -114,6 +125,7 @@ model Expense {
   group     Group?         @relation(fields: [groupId], references: [id], onDelete: Cascade)
   createdBy User           @relation("ExpenseCreator", fields: [createdById], references: [id])
   paidBy    User           @relation("ExpensePayer", fields: [paidById], references: [id])
+  recurring RecurringExpense? @relation(fields: [recurringId], references: [id], onDelete: SetNull)
   splits    ExpenseSplit[]
   receipts  Receipt[]
   items     ExpenseItem[]
@@ -325,4 +337,40 @@ model RateLimit {
   key     String   @id
   count   Int
   resetAt DateTime
+}
+
+// A schedule that creates the same expense every week/month (rent, subscriptions).
+model RecurringExpense {
+  id          String    @id @default(cuid())
+  createdById String
+  groupId     String?   // group context, or
+  friendId    String?   // direct context: the other person (createdBy is the first)
+  description String
+  amountCents Int
+  currency    String
+  category    String    @default("general")
+  notes       String?
+  paidById    String
+  splitMethod String
+  splitEntries Json     // [{ userId, value? }] as accepted by expenseSchema.split.entries
+  frequency   String    // weekly | monthly
+  interval    Int       @default(1)
+  /// weekly: 0–6 (Sun–Sat); monthly: 1–31 (clamped to the month's last day)
+  anchorDay   Int
+  nextRunOn   DateTime  // calendar date at UTC noon, like Expense.date
+  endsOn      DateTime?
+  lastRunOn   DateTime?
+  pausedAt    DateTime?
+  stoppedAt   DateTime?
+  lastError   String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  createdBy User    @relation("RecurringCreator", fields: [createdById], references: [id])
+  group     Group?  @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  expenses  Expense[]
+
+  @@index([nextRunOn])
+  @@index([groupId])
+  @@index([createdById])
 }

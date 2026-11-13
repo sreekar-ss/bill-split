@@ -9,6 +9,10 @@ export interface EmailContent {
   button?: { label: string; url: string };
   /** Small print under the button. */
   notes?: string[];
+  /** Notification emails: unsubscribe page linked in the footer… */
+  unsubscribeUrl?: string;
+  /** …and the RFC 8058 one-click endpoint sent in List-Unsubscribe headers (defaults to unsubscribeUrl). */
+  oneClickUrl?: string;
 }
 
 const esc = (s: string) =>
@@ -21,6 +25,7 @@ export function renderEmail(c: EmailContent) {
     ...c.paragraphs.flatMap((p) => [p, ""]),
     ...(c.button ? [`${c.button.label}: ${c.button.url}`, ""] : []),
     ...(c.notes ?? []).flatMap((n) => [n, ""]),
+    ...(c.unsubscribeUrl ? [`Unsubscribe from these emails: ${c.unsubscribeUrl}`] : []),
   ]
     .join("\n")
     .trim();
@@ -36,7 +41,10 @@ export function renderEmail(c: EmailContent) {
 <p style="margin:0 0 20px;font-size:18px;font-weight:700">BillSplit</p>
 ${para(c.greeting)}${c.paragraphs.map(para).join("")}${button}${(c.notes ?? []).map(note).join("")}
 </td></tr></table>
-<p style="margin:16px 0 0;font-size:12px;color:#55627a">Sent to ${esc(c.to)}</p>
+<p style="margin:16px 0 0;font-size:12px;color:#55627a">Sent to ${esc(c.to)}${c.unsubscribeUrl ? ` · <a href="${esc(c.unsubscribeUrl)}" style="color:#55627a">Unsubscribe from these emails</a>` : ""}</p>
 </td></tr></table></body></html>`;
-  return { to: c.to, subject: c.subject, text, html };
+  const headers = c.unsubscribeUrl
+    ? { "List-Unsubscribe": `<${c.oneClickUrl ?? c.unsubscribeUrl}>`, "List-Unsubscribe-Post": "List-Unsubscribe=One-Click" }
+    : undefined;
+  return { to: c.to, subject: c.subject, text, html, ...(headers ? { headers } : {}) };
 }

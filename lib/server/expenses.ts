@@ -1,5 +1,6 @@
 import "server-only";
 import { fromDateInput, toDateInput } from "@/lib/domain/dates";
+import { describeSchedule, type Frequency } from "@/lib/domain/recurrence";
 import { computeShares, type SplitMethod } from "@/lib/domain/splits";
 import { expenseSchema, type ExpenseInput } from "@/lib/validation";
 import { db } from "./db";
@@ -59,7 +60,13 @@ function buildShares(data: ParsedExpense, participants: string[], direct: boolea
   return rows;
 }
 
-export async function createExpense(userId: string, input: ExpenseInput | unknown) {
+/** Internal-only fields (never from user input): link to the recurring schedule that created it. */
+export interface ExpenseOrigin {
+  recurringId?: string;
+  recurrenceKey?: string;
+}
+
+export async function createExpense(userId: string, input: ExpenseInput | unknown, origin: ExpenseOrigin = {}) {
   const data = parse(expenseSchema, input);
   const ctx = await resolveContext(userId, data);
   const rows = buildShares(data, ctx.participants, ctx.direct);
@@ -75,6 +82,8 @@ export async function createExpense(userId: string, input: ExpenseInput | unknow
       groupId: data.groupId ?? null,
       paidById: data.paidById,
       createdById: userId,
+      recurringId: origin.recurringId ?? null,
+      recurrenceKey: origin.recurrenceKey ?? null,
       splits: { create: rows },
     },
     select: { id: true, groupId: true },
@@ -87,6 +96,9 @@ async function loadAuthorized(userId: string, expenseId: string) {
     where: { id: expenseId },
     include: {
       splits: { select: { userId: true, amountCents: true, percentage: true, shares: true } },
+      recurring: {
+        select: { id: true, frequency: true, interval: true, anchorDay: true, nextRunOn: true, endsOn: true, pausedAt: true, stoppedAt: true },
+      },
       paidBy: { select: { id: true, name: true, email: true, status: true } },
       createdBy: { select: { id: true, name: true, status: true } },
       group: { select: { id: true, name: true, currency: true, members: { select: { userId: true } } } },
@@ -123,6 +135,16 @@ export async function getExpense(userId: string, expenseId: string) {
     friendId,
     paidBy: e.paidBy,
     createdBy: e.createdBy,
+    /** Present when a recurring schedule created this expense. */
+    recurring: e.recurring
+      ? {
+          id: e.recurring.id,
+          schedule: describeSchedule({ frequency: e.recurring.frequency as Frequency, interval: e.recurring.interval, anchorDay: e.recurring.anchorDay }),
+          nextRunOn: toDateInput(e.recurring.nextRunOn),
+          endsOn: e.recurring.endsOn ? toDateInput(e.recurring.endsOn) : null,
+          state: e.recurring.stoppedAt ? ("stopped" as const) : e.recurring.pausedAt ? ("paused" as const) : ("active" as const),
+        }
+      : null,
     createdAt: e.createdAt,
     updatedAt: e.updatedAt,
     shares: e.splits.map((s) => ({

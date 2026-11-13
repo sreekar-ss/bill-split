@@ -64,6 +64,26 @@ export const paymentHandlesSchema = z.object({
   upiId: handle(/^[A-Za-z0-9._-]{2,256}@[A-Za-z][A-Za-z0-9]{1,64}$/, "UPI IDs look like name@bank."),
 });
 
+export const notificationPrefsSchema = z
+  .object({
+    notifyExpenses: z.boolean(),
+    notifyPayments: z.boolean(),
+    notifyReminders: z.boolean(),
+    weeklyDigest: z.boolean(),
+  })
+  .partial();
+
+/** Repeat settings sent alongside a new expense. */
+export const recurrenceSchema = z.object({
+  frequency: z.enum(["weekly", "monthly"]),
+  interval: z.number().int().min(1, "Repeat at least every 1.").max(12, "Repeat at most every 12.").default(1),
+  endsOn: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, "Choose an end date.")
+    .optional(),
+});
+export type RecurrenceInput = z.input<typeof recurrenceSchema>;
+
 export const deleteAccountSchema = z.object({
   password: z.string().min(1, "Enter your password to confirm."),
 });

@@ -1,3 +1,4 @@
+import { Repeat } from "lucide-react";
 import { DateBlock, LedgerRow, MonthHeading, StakeLabel } from "@/components/ui/ledger";
 import { formatMoney } from "@/lib/domain/money";
 import type { GroupDetail } from "@/lib/server/groups";
@@ -38,7 +39,7 @@ export function GroupLedger({ group, meId }: { group: GroupDetail; meId: string 
                   <LedgerRow
                     href={`/expenses/${entry.expense.id}`}
                     leading={<DateBlock date={entry.expense.date} />}
-                    title={entry.expense.description}
+                    title={entry.expense.recurring ? <RecurringTitle title={entry.expense.description} /> : entry.expense.description}
                     meta={`${personName(entry.expense.paidBy, meId, true)} paid ${formatMoney(entry.expense.amountCents, group.currency)}`}
                     trailing={
                       <StakeLabel cents={entry.expense.myStakeCents} currency={group.currency} involved={entry.expense.involvesMe} />
@@ -61,5 +62,17 @@ export function GroupLedger({ group, meId }: { group: GroupDetail; meId: string 
         </section>
       ))}
     </div>
+  );
+}
+
+/** The title plus a small repeat icon, which stays visible when a long title truncates. Named for screen readers. */
+function RecurringTitle({ title }: { title: string }) {
+  return (
+    <span className="flex min-w-0 items-center gap-1.5">
+      <span className="truncate">{title}</span>
+      <Repeat role="img" aria-label="Recurring" className="size-[15px] shrink-0 text-ink-muted" strokeWidth={2.25}>
+        <title>Recurring</title>
+      </Repeat>
+    </span>
   );
 }

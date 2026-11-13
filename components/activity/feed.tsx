@@ -1,3 +1,4 @@
+import { Repeat } from "lucide-react";
 import { Fragment } from "react";
 import { DateBlock, LedgerRow, MonthHeading, PaymentLabel, StakeLabel } from "@/components/ui/ledger";
 import { formatMoney, type Cents } from "@/lib/domain/money";
@@ -24,6 +25,8 @@ export type FeedItem =
       /** For direct expenses: the other person (null when the page already says who). */
       friend?: Person | null;
       myStakeCents: Cents;
+      /** True when a recurring schedule created this expense (see lib/server/activity-recurring). */
+      recurring?: boolean;
     }
   | {
       type: "payment";
@@ -51,6 +54,21 @@ export function expenseMeta(item: Extract<FeedItem, { type: "expense" }>, meId: 
   return item.paidBy.id === meId ? `${paid} with ${displayName(item.friend)}` : `${paid} with you`;
 }
 
+/**
+ * The meta line for an expense row. A scheduled expense starts with "Recurring." (with an icon, so the
+ * label never relies on the icon alone), e.g. "Recurring. Ana paid $1,200.00 in Flat".
+ */
+function ExpenseMeta({ item, meId }: { item: Extract<FeedItem, { type: "expense" }>; meId: string }) {
+  const text = expenseMeta(item, meId);
+  if (!item.recurring) return text;
+  return (
+    <>
+      <Repeat className="-mt-px mr-1 inline size-3.5 align-middle" aria-hidden />
+      Recurring. {text}
+    </>
+  );
+}
+
 export function paymentTitle(item: Extract<FeedItem, { type: "payment" }>, meId: string) {
   return `${who(item.from, meId, true)} paid ${who(item.to, meId, false)}`;
 }
@@ -67,7 +85,7 @@ export function FeedRow({ item, meId, variant = "feed" }: { item: FeedItem; meId
         href={`/expenses/${item.id}`}
         leading={<DateBlock date={item.date} />}
         title={item.description}
-        meta={expenseMeta(variant === "friend" ? { ...item, friend: null } : item, meId)}
+        meta={<ExpenseMeta item={variant === "friend" ? { ...item, friend: null } : item} meId={meId} />}
         trailing={<StakeLabel cents={item.myStakeCents} currency={item.currency} involved={involved} />}
       />
     );

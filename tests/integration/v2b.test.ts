@@ -86,8 +86,26 @@ describe("reminders", () => {
     await expect(sendReminder(ana.id, { toUserId: ben.id, groupId: g.id })).resolves.toMatchObject({ delivered: true });
     const mail = mailsTo(ben.email)[0];
     expect(mail.subject).toBe("Reminder from Ana: $500.00 in Flat");
-    expect(mail.text).toContain("Venmo, PayPal");
+    expect(mail.text).toContain("You can pay with Venmo or PayPal, then record the payment");
+    expect(mail.text).toContain("Pay Ana $500.00 with PayPal: https://paypal.me/analima/500.00USD");
+    expect(mail.html).toContain('href="https://paypal.me/analima/500.00USD"');
     await expect(sendReminder(ana.id, { toUserId: ben.id, groupId: g.id })).rejects.toMatchObject({ code: "RATE_LIMITED" });
+
+    // The cooldown is per pair: another group, or the direct balance, doesn't reset it.
+    await addFriendByEmail(ana.id, { email: ben.email }).catch(() => undefined);
+    await createExpense(ana.id, {
+      friendId: ben.id, description: "Tickets", amountCents: 3000, paidById: ana.id, date: "2026-11-02",
+      split: { method: "exact", entries: [{ userId: ana.id, value: 0 }, { userId: ben.id, value: 3000 }] },
+    });
+    const g2 = await createGroup(ana.id, { name: "Trip" });
+    await addMemberByEmail(ana.id, g2.id, { email: ben.email });
+    await createExpense(ana.id, {
+      groupId: g2.id, description: "Hotel", amountCents: 4000, paidById: ana.id, date: "2026-11-03",
+      split: { method: "equal", entries: [{ userId: ana.id }, { userId: ben.id }] },
+    });
+    await expect(sendReminder(ana.id, { toUserId: ben.id, friendId: ben.id })).rejects.toMatchObject({ code: "RATE_LIMITED" });
+    await expect(sendReminder(ana.id, { toUserId: ben.id, groupId: g2.id })).rejects.toMatchObject({ code: "RATE_LIMITED" });
+    expect(mailsTo(ben.email).filter((m) => m.subject.startsWith("Reminder"))).toHaveLength(1);
 
     const out = await user("Out");
     await expect(sendReminder(out.id, { toUserId: ben.id, groupId: g.id })).rejects.toMatchObject({ code: "NOT_FOUND" });
@@ -104,6 +122,22 @@ describe("reminders", () => {
     sentEmails.length = 0;
     await expect(sendReminder(ana.id, { toUserId: maya.id, friendId: maya.id })).resolves.toMatchObject({ delivered: false });
     expect(sentEmails).toHaveLength(0);
+  });
+
+  it("emails a direct reminder with pay links", async () => {
+    const [ana, maya] = await Promise.all([user("Ana"), user("Maya")]);
+    await updatePaymentHandles(ana.id, { venmoHandle: "ana-lima" });
+    await addFriendByEmail(ana.id, { email: maya.email });
+    await createExpense(ana.id, {
+      friendId: maya.id, description: "Tickets", amountCents: 3000, paidById: ana.id, date: "2026-11-02",
+      split: { method: "exact", entries: [{ userId: ana.id, value: 0 }, { userId: maya.id, value: 3000 }] },
+    });
+    sentEmails.length = 0;
+    await expect(sendReminder(ana.id, { toUserId: maya.id, friendId: maya.id })).resolves.toMatchObject({ delivered: true });
+    const [mail] = mailsTo(maya.email);
+    expect(mail.subject).toBe("Reminder from Ana: $30.00");
+    expect(mail.text).toContain("You can pay with Venmo, then record the payment");
+    expect(mail.text).toMatch(/Pay Ana \$30\.00 with Venmo: https:\/\/venmo\.com\//);
   });
 });
 
@@ -128,6 +162,21 @@ describe("weekly digest", () => {
     await sendWeeklyDigests(new Date("2030-01-08T13:00:00Z"));
     expect(mailsTo(ana.email)).toHaveLength(0);
   });
+
+  it("sends once even when two runs overlap", async () => {
+    const [ana, ben] = await Promise.all([user("Ana"), user("Ben")]);
+    await updateNotificationPrefs(ana.id, { weeklyDigest: true });
+    const g = await createGroup(ana.id, { name: "Trip" });
+    await addMemberByEmail(ana.id, g.id, { email: ben.email });
+    await createExpense(ana.id, {
+      groupId: g.id, description: "Hotel", amountCents: 4000, paidById: ana.id, date: "2026-11-03",
+      split: { method: "equal", entries: [{ userId: ana.id }, { userId: ben.id }] },
+    });
+    const now = new Date("2031-01-06T13:00:00Z");
+    sentEmails.length = 0;
+    await Promise.all([sendWeeklyDigests(now), sendWeeklyDigests(now)]);
+    expect(mailsTo(ana.email)).toHaveLength(1);
+  });
 });
 
 describe("recurring expenses", () => {
@@ -139,14 +188,16 @@ describe("recurring expenses", () => {
       groupId: g.id, description: "Internet", amountCents: 6000, paidById: ana.id, date: "2026-11-02",
       split: { method: "equal" as const, entries: [{ userId: ana.id }, { userId: ben.id }] },
     };
-    await expect(createRecurringExpense(ana.id, input, { frequency: "weekly", endsOn: "2026-10-01" })).rejects.toMatchObject({ code: "VALIDATION" });
-    const r = await createRecurringExpense(ana.id, input, { frequency: "weekly", endsOn: "2026-11-23" });
+    const today = "2026-11-02";
+    await expect(createRecurringExpense(ana.id, input, { frequency: "weekly", endsOn: "2026-10-01" }, today)).rejects.toMatchObject({ code: "VALIDATION" });
+    const r = await createRecurringExpense(ana.id, input, { frequency: "weekly", endsOn: "2026-11-23" }, today);
     expect(await db.expense.count({ where: { recurringId: r.recurringId } })).toBe(1);
 
     const [summary] = await listRecurring(ben.id, { groupId: g.id });
     expect(summary).toMatchObject({ schedule: "Every Monday", nextRunOn: "2026-11-09", paused: false, endsOn: "2026-11-23" });
     await expect(listRecurring((await user("Out")).id, { groupId: g.id })).rejects.toMatchObject({ code: "NOT_FOUND" });
 
+    // The job didn't run for a while (downtime): it catches up on the dates that came due.
     sentEmails.length = 0;
     await expect(runDueRecurring("2026-11-17")).resolves.toMatchObject({ created: 2 });
     expect(new Set(sentEmails.map((m) => m.to))).toEqual(new Set([ana.email, ben.email])); // recurring: creator is told too
@@ -173,6 +224,7 @@ describe("recurring expenses", () => {
         split: { method: "equal", entries: [{ userId: ana.id }, { userId: maya.id }] },
       },
       { frequency: "monthly" },
+      "2026-11-05",
     );
     expect((await listRecurring(maya.id, { friendId: ana.id }))[0]).toMatchObject({ schedule: "Monthly on the 5th", nextRunOn: "2026-12-05" });
 
@@ -188,9 +240,77 @@ describe("recurring expenses", () => {
     await expect(runDueRecurring("2027-03-06")).resolves.toMatchObject({ paused: 1, created: 0 });
     const row = await db.recurringExpense.findUniqueOrThrow({ where: { id: r.recurringId } });
     expect(row.pausedAt).not.toBeNull();
-    expect(row.lastError).toBeTruthy();
+    expect(row.lastError).toBe("You two are no longer friends on BillSplit.");
 
     await stopRecurring(ana.id, r.recurringId);
     expect((await db.recurringExpense.findUniqueOrThrow({ where: { id: r.recurringId } })).stoppedAt).not.toBeNull();
+  });
+  it("doesn't back-fill a back-dated schedule, and rejects an end date before the first repeat", async () => {
+    const [ana, ben] = await Promise.all([user("Ana"), user("Ben")]);
+    const g = await createGroup(ana.id, { name: "Flat" });
+    await addMemberByEmail(ana.id, g.id, { email: ben.email });
+    const base = { groupId: g.id, amountCents: 120000, paidById: ana.id, split: { method: "equal" as const, entries: [{ userId: ana.id }, { userId: ben.id }] } };
+    const today = "2026-11-12"; // a Thursday
+
+    // Rent dated Jan 1, set up in November: only the Jan 1 expense now, then Dec 1, not Feb–Nov.
+    const rent = await createRecurringExpense(ana.id, { ...base, description: "Rent", date: "2026-01-01" }, { frequency: "monthly" }, today);
+    expect((await listRecurring(ana.id, { groupId: g.id })).find((x) => x.id === rent.recurringId)).toMatchObject({ nextRunOn: "2026-12-01" });
+    sentEmails.length = 0;
+    await runDueRecurring(today);
+    expect(await db.expense.count({ where: { recurringId: rent.recurringId } })).toBe(1);
+    expect(mailsTo(ben.email)).toHaveLength(0);
+
+    // Weekly from three Thursdays ago: today is on the schedule, so today's is the next one.
+    const desk = await createRecurringExpense(ana.id, { ...base, description: "Desk", date: "2026-10-22" }, { frequency: "weekly" }, today);
+    expect((await listRecurring(ana.id, { groupId: g.id })).find((x) => x.id === desk.recurringId)).toMatchObject({ nextRunOn: "2026-11-12" });
+    await runDueRecurring(today);
+    expect(await db.expense.count({ where: { recurringId: desk.recurringId } })).toBe(2);
+
+    // Ends on or after the expense date but before the first repeat: it would never repeat.
+    await expect(
+      createRecurringExpense(ana.id, { ...base, description: "Once", date: "2026-11-12" }, { frequency: "weekly", endsOn: "2026-11-18" }, today),
+    ).rejects.toMatchObject({ code: "VALIDATION", fieldErrors: { endsOn: "It would end before it repeats. Choose Nov 19, 2026 or later, or leave it empty." } });
+    expect(await db.expense.count({ where: { groupId: g.id, description: "Once" } })).toBe(0);
+  });
+
+  it("keeps a direct schedule's currency when the creator changes their default currency", async () => {
+    const [ana, maya] = await Promise.all([user("Ana"), user("Maya")]);
+    await addFriendByEmail(ana.id, { email: maya.email });
+    await db.user.update({ where: { id: ana.id }, data: { defaultCurrency: "USD" } });
+    const r = await createRecurringExpense(
+      ana.id,
+      {
+        friendId: maya.id, description: "Rent", amountCents: 120000, paidById: ana.id, date: "2026-11-05",
+        split: { method: "equal", entries: [{ userId: ana.id }, { userId: maya.id }] },
+      },
+      { frequency: "monthly" },
+      "2026-11-05",
+    );
+    await db.user.update({ where: { id: ana.id }, data: { defaultCurrency: "EUR" } });
+    await runDueRecurring("2026-12-05");
+    const currencies = (await db.expense.findMany({ where: { recurringId: r.recurringId }, orderBy: { date: "asc" }, select: { currency: true } })).map((e) => e.currency);
+    expect(currencies).toEqual(["USD", "USD"]);
+    expect((await listRecurring(maya.id, { friendId: ana.id }))[0]).toMatchObject({ currency: "USD" });
+  });
+
+  it("pauses with a specific reason when the person who set it up left the group", async () => {
+    const [ana, ben, cy] = await Promise.all([user("Ana"), user("Ben"), user("Cy")]);
+    const g = await createGroup(ana.id, { name: "Flat" });
+    await addMemberByEmail(ana.id, g.id, { email: ben.email });
+    await addMemberByEmail(ana.id, g.id, { email: cy.email });
+    const r = await createRecurringExpense(
+      ana.id,
+      {
+        groupId: g.id, description: "Internet", amountCents: 6000, paidById: ben.id, date: "2026-11-02",
+        split: { method: "equal", entries: [{ userId: ben.id }, { userId: cy.id }] },
+      },
+      { frequency: "weekly" },
+      "2026-11-02",
+    );
+    await db.groupMember.delete({ where: { groupId_userId: { groupId: g.id, userId: ana.id } } });
+    await runDueRecurring("2026-11-09");
+    expect(await db.expense.count({ where: { recurringId: r.recurringId } })).toBe(1);
+    const [row] = await listRecurring(ben.id, { groupId: g.id });
+    expect(row).toMatchObject({ id: r.recurringId, paused: true, lastError: "The person who set this up is no longer in the group." });
   });
 });

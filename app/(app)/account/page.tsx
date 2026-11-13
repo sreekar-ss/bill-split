@@ -4,6 +4,7 @@ import { DeleteAccountButton } from "@/components/account/delete-account";
 import { EmailStatus } from "@/components/account/email-status";
 import { LogoutButton } from "@/components/account/logout-button";
 import { LogoutEverywhereButton } from "@/components/account/logout-everywhere";
+import { NotificationSettings } from "@/components/account/notification-settings";
 import { PasswordForm } from "@/components/account/password-form";
 import { PaymentHandlesForm } from "@/components/account/payment-handles-form";
 import { ProfileForm } from "@/components/account/profile-form";
@@ -12,13 +13,14 @@ import { Avatar } from "@/components/ui/avatar";
 import { buttonVariants } from "@/components/ui/button";
 import { PageHeader, Section } from "@/components/ui/page";
 import { requireUser } from "@/lib/auth/session";
+import { getNotificationPrefs } from "@/lib/server/notifications";
 import { getProfile } from "@/lib/server/users";
 
 export const metadata: Metadata = { title: "Account" };
 
 export default async function AccountPage() {
   const user = await requireUser();
-  const profile = await getProfile(user.id);
+  const [profile, prefs] = await Promise.all([getProfile(user.id), getNotificationPrefs(user.id)]);
 
   return (
     <div className="max-w-[720px]">
@@ -51,6 +53,22 @@ export default async function AccountPage() {
             }}
           />
         </Section>
+
+        {/* id: deep link from the /unsubscribe page and emails ("turn them back on in Account"). */}
+        <div id="notifications" className="scroll-mt-6">
+          <Section title="Email notifications">
+            <NotificationSettings
+              email={profile.email}
+              emailVerified={profile.emailVerified}
+              initial={{
+                notifyExpenses: prefs.notifyExpenses,
+                notifyPayments: prefs.notifyPayments,
+                notifyReminders: prefs.notifyReminders,
+                weeklyDigest: prefs.weeklyDigest,
+              }}
+            />
+          </Section>
+        </div>
 
         <Section title="Theme">
           <ThemePicker />

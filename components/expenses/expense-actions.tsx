@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
 import { deleteExpenseAction } from "@/app/actions/expenses";
+import { lowerFirst } from "@/components/recurring/format";
 import { useAddExpense } from "@/components/shell/add-expense-context";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
@@ -17,6 +18,8 @@ export function ExpenseActions({ expense, backHref }: { expense: ExpenseDetail; 
   const router = useRouter();
   const [confirming, setConfirming] = useState(false);
   const [pending, startTransition] = useTransition();
+  // Deleting one occurrence doesn't stop the schedule; say so, and point to the control that does.
+  const repeating = expense.recurring && expense.recurring.state !== "stopped" ? expense.recurring : null;
 
   function remove() {
     startTransition(async () => {
@@ -46,7 +49,18 @@ export function ExpenseActions({ expense, backHref }: { expense: ExpenseDetail; 
         open={confirming}
         onOpenChange={(open) => !pending && setConfirming(open)}
         title="Delete this expense?"
-        body={`“${expense.description}” will be removed for everyone on it, and balances will update. This can't be undone.`}
+        body={
+          <>
+            “{expense.description}” will be removed for everyone on it, and balances will update. This can&apos;t be undone.
+            {repeating ? (
+              <span className="mt-2 block">
+                {repeating.state === "paused"
+                  ? "This deletes only this one. Its schedule stays, paused. To end it, use Stop repeating."
+                  : `This deletes only this one. It keeps repeating ${lowerFirst(repeating.schedule)}. To stop future ones, use Stop repeating.`}
+              </span>
+            ) : null}
+          </>
+        }
         confirmLabel="Delete expense"
         pending={pending}
         onConfirm={remove}

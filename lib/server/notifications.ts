@@ -195,7 +195,8 @@ export async function notifyPaymentRecorded(paymentId: string, actorId: string) 
 
 /**
  * Nudge someone who owes you, in one context (group or direct). Only allowed when they really owe
- * you there, at most once per pair+context every REMINDER_COOLDOWN_DAYS. Includes your payment links.
+ * you there, at most once per pair (across all groups and direct) every REMINDER_COOLDOWN_DAYS.
+ * Includes your payment links.
  */
 export async function sendReminder(fromUserId: string, input: { toUserId: string; groupId?: string; friendId?: string }) {
   const { toUserId, groupId } = input;
@@ -234,7 +235,7 @@ export async function sendReminder(fromUserId: string, input: { toUserId: string
     db.user.findUniqueOrThrow({ where: { id: toUserId }, select: recipientSelect }),
   ]);
 
-  const { count, resetAt } = await hit(`remind:${fromUserId}:${toUserId}:${groupId ?? "direct"}`, REMINDER_COOLDOWN_DAYS * 86400000);
+  const { count, resetAt } = await hit(`remind:${fromUserId}:${toUserId}`, REMINDER_COOLDOWN_DAYS * 86400000);
   if (count > 1) {
     const days = Math.max(1, Math.ceil((resetAt.getTime() - Date.now()) / 86400000));
     throw new AppError(`You already reminded ${displayName(to)}. You can send another in ${days} day${days === 1 ? "" : "s"}.`, "RATE_LIMITED");
@@ -252,32 +253,43 @@ export async function sendReminder(fromUserId: string, input: { toUserId: string
       greeting: `Hi ${to.name},`,
       paragraphs: [
         `${from.name} sent you a friendly reminder: you owe them ${amount}${where}.`,
-        links.length ? `You can pay with ${links.map((l) => l.label).join(", ")} from the settle-up screen, then record the payment.` : "When you've paid, record it in BillSplit so balances update.",
+        links.length
+          ? `You can pay with ${joinOr(links.map((l) => l.label))}, then record the payment in BillSplit so balances update.`
+          : "When you've paid, record it in BillSplit so balances update.",
       ],
+      links: links.map((l) => ({ label: `Pay ${from.name} ${amount} with ${l.label}`, url: l.url })),
       button: { label: "Settle up", url: link },
       unsubscribeUrl: unsubscribeUrl(to.id, "reminders"),
-        oneClickUrl: oneClickUnsubscribeUrl(to.id, "reminders"),
+      oneClickUrl: oneClickUnsubscribeUrl(to.id, "reminders"),
     }),
   );
   return { delivered: true as const, name: displayName(to) };
+}
+
+/** "Venmo", "Venmo or PayPal", "Venmo, PayPal or Cash App". */
+function joinOr(items: string[]) {
+  return items.length <= 1 ? (items[0] ?? "") : `${items.slice(0, -1).join(", ")} or ${items[items.length - 1]}`;
 }
 
 // ── Weekly digest ───────────────────────────────────────────────────────────────────────────
 
 /** Monday summary for users who opted in. Skips people who are all settled. Idempotent per ~week. */
 export async function sendWeeklyDigests(now = new Date()) {
+  const cutoff = new Date(now.getTime() - 6 * 86400000);
+  const notRecent = [{ lastDigestAt: null }, { lastDigestAt: { lt: cutoff } }];
   const due = await db.user.findMany({
-    where: {
-      status: "active",
-      emailVerified: true,
-      weeklyDigest: true,
-      OR: [{ lastDigestAt: null }, { lastDigestAt: { lt: new Date(now.getTime() - 6 * 86400000) } }],
-    },
+    where: { status: "active", emailVerified: true, weeklyDigest: true, OR: notRecent },
     select: { id: true, name: true, email: true, defaultCurrency: true },
+    // Oldest first, so a backlog over `take` is worked through instead of re-picking the same people.
+    orderBy: { lastDigestAt: { sort: "asc", nulls: "first" } },
     take: 500,
   });
   let sent = 0;
   for (const u of due) {
+    // Claim this user's week atomically: if another run (a cron retry, a manual run) got here
+    // first, it already sent their digest.
+    const { count } = await db.user.updateMany({ where: { id: u.id, OR: notRecent }, data: { lastDigestAt: now } });
+    if (count === 0) continue;
     const relations = await computeRelations(u.id);
     const lines: string[] = [];
     const ids = [...relations.keys()];
@@ -293,7 +305,6 @@ export async function sendWeeklyDigests(now = new Date()) {
         lines.push(c.cents > 0 ? `${who} owes you ${amt}${ctx}` : `You owe ${who} ${amt}${ctx}`);
       }
     }
-    await db.user.update({ where: { id: u.id }, data: { lastDigestAt: now } });
     if (lines.length === 0) continue;
     await deliver(
       renderEmail({

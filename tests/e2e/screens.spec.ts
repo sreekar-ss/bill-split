@@ -19,7 +19,14 @@ import {
   shellAddExpense,
   splitInput,
 } from "./helpers";
-import { linkFor } from "./mail";
+import { CRON_SECRET } from "../../playwright.config";
+import { linkFor, unsubscribeLink, waitForMail } from "./mail";
+
+/** yyyy-mm-dd, `days` from today in UTC (the daily job's calendar). */
+function utcDay(days = 0): string {
+  const d = new Date();
+  return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() + days)).toISOString().slice(0, 10);
+}
 
 /**
  * Seeds a realistic dataset through the UI and saves a screenshot of every screen to
@@ -138,9 +145,20 @@ test("capture every screen", async ({ page, browser }, info) => {
   });
   await addExpense(page, { amount: "38.60", description: "Taxi from the airport", paidBy: "Dev", exclude: ["Chloe"], category: "Transport", date: "2026-10-02" });
 
+  // A weekly co-working desk, started two weeks ago; past weeks aren't back-filled, and the daily job adds today's.
+  await shellAddExpense(page).click();
+  let sheet = expenseSheet(page);
+  await fillExpense(sheet, { amount: "45", description: "Co-working desk", category: "General", date: utcDay(-14) });
+  await sheet.getByRole("radiogroup", { name: "Repeat" }).getByRole("radio", { name: "Weekly" }).click();
+  await sheet.getByRole("button", { name: "Save expense" }).click();
+  await expectToast(page, "Recurring expense saved");
+  const cron = await page.request.get("/api/cron/daily", { headers: { Authorization: `Bearer ${CRON_SECRET}` } });
+  expect(cron.ok()).toBe(true);
+  await page.reload();
+
   // Dev pays me part of what he owes.
   await settlePanel(page).getByRole("button", { name: "Record a different payment" }).click();
-  let sheet = dialog(page, "Settle up");
+  sheet = dialog(page, "Settle up");
   await sheet.getByLabel("From").selectOption({ label: "Dev" });
   await sheet.getByLabel("To").selectOption({ label: "You" });
   await sheet.getByLabel("Amount").fill("100");
@@ -157,6 +175,13 @@ test("capture every screen", async ({ page, browser }, info) => {
   await expect(page.getByRole("heading", { level: 1, name: "Maya" })).toBeVisible();
   const friendUrl = page.url();
   await addExpense(page, { amount: "84", description: "Concert tickets", paidBy: "Maya", category: "Entertainment" });
+  await addExpense(page, { amount: "300", description: "Cabin weekend", category: "Travel" });
+  await shellAddExpense(page).click();
+  sheet = expenseSheet(page);
+  await fillExpense(sheet, { amount: "16.99", description: "Music streaming", category: "Entertainment" });
+  await sheet.getByRole("radiogroup", { name: "Repeat" }).getByRole("radio", { name: "Monthly" }).click();
+  await sheet.getByRole("button", { name: "Save expense" }).click();
+  await expectToast(page, "Recurring expense saved");
 
   // An empty group.
   const emptyGroupUrl = await createGroup(page, "Book club");
@@ -172,7 +197,20 @@ test("capture every screen", async ({ page, browser }, info) => {
 
   await page.goto(groupUrl);
   await expect(page.getByRole("heading", { level: 1, name: "Lisbon trip" })).toBeVisible();
+  await expect(page.getByRole("region", { name: "Recurring" })).toContainText("Co-working desk");
+  await expect(settlePanel(page).getByTestId("remind-button").first()).toBeVisible();
   await shot("group-detail");
+
+  // Add expense, repeating weekly: the sheet says when it repeats.
+  await shellAddExpense(page).click();
+  sheet = expenseSheet(page);
+  await fillExpense(sheet, { amount: "120", description: "Surf board rental" });
+  await sheet.getByRole("radiogroup", { name: "Repeat" }).getByRole("radio", { name: "Weekly" }).click();
+  await expect(sheet.getByText(/^Repeats every /)).toBeVisible();
+  await sheet.getByText(/^Repeats every /).scrollIntoViewIfNeeded();
+  await shot("add-expense-repeat-weekly", { fullPage: false });
+  await page.keyboard.press("Escape");
+  await expect(sheet).toBeHidden();
 
   // Add expense in Exact mode, partly assigned.
   await shellAddExpense(page).click();
@@ -214,11 +252,19 @@ test("capture every screen", async ({ page, browser }, info) => {
   await expect(page.getByRole("heading", { level: 1, name: "Surf lessons" })).toBeVisible();
   await shot("expense-detail");
 
+  await page.goto(groupUrl);
+  await expenseLink(page, "Co-working desk").click();
+  await expect(page.getByRole("heading", { level: 1, name: "Co-working desk" })).toBeVisible();
+  await expect(page.getByText("Repeats", { exact: true })).toBeVisible();
+  await shot("expense-detail-recurring");
+
   await page.goto("/friends");
   await shot("friends");
 
   await page.goto(friendUrl);
   await expect(page.getByRole("heading", { level: 1, name: "Maya" })).toBeVisible();
+  await expect(page.getByRole("region", { name: "Recurring" })).toContainText("Music streaming");
+  await expect(page.getByTestId("remind-button")).toBeVisible();
   await shot("friend-detail");
 
   await page.goto("/activity");
@@ -228,6 +274,10 @@ test("capture every screen", async ({ page, browser }, info) => {
   await page.goto("/account");
   await expect(page.getByRole("heading", { level: 1, name: "Account" })).toBeVisible();
   await shot("account");
+  await page.goto("/account#notifications");
+  await expect(page.getByRole("switch", { name: "Weekly summary (Mondays)" })).toBeVisible();
+  await page.getByRole("switch", { name: "Weekly summary (Mondays)" }).scrollIntoViewIfNeeded();
+  await shot("account-notifications", { fullPage: false });
 
   await page.goto(emptyGroupUrl);
   await expect(page.getByRole("heading", { name: "No expenses yet" })).toBeVisible();
@@ -257,6 +307,18 @@ test("capture every screen", async ({ page, browser }, info) => {
     await visitor.goto(await linkFor(priyaEmail, "/invite/accept"));
     await expect(visitor.getByRole("heading", { level: 1, name: "Join BillSplit" })).toBeVisible();
     await shot("claim-account", { target: visitor });
+
+    // Unsubscribe from an email's footer link: asks first, then confirms; a broken link explains itself.
+    const unsub = unsubscribeLink(await waitForMail(me.email, "Ben added Dinner at Taberna"));
+    await visitor.goto(unsub);
+    await expect(visitor.getByRole("heading", { level: 1, name: "Stop emails about expenses?" })).toBeVisible();
+    await shot("unsubscribe", { target: visitor });
+    await visitor.getByRole("button", { name: "Stop expense emails" }).click();
+    await expect(visitor.getByRole("heading", { level: 1, name: "Unsubscribed" })).toBeVisible();
+    await shot("unsubscribed", { target: visitor });
+    await visitor.goto(unsub.replace(/s=[^&]+/, "s=not-a-real-signature"));
+    await expect(visitor.getByRole("heading", { level: 1, name: "This unsubscribe link doesn't work" })).toBeVisible();
+    await shot("unsubscribe-invalid", { target: visitor });
     await ctx.close();
   }
 

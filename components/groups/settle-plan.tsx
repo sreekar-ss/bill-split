@@ -1,10 +1,12 @@
 "use client";
 
 import { useState } from "react";
+import { RemindButton } from "@/components/notifications/remind-button";
 import { SettleUpSheet, type SettleUpSheetProps } from "@/components/payments/settle-up-sheet";
 import { Button } from "@/components/ui/button";
 import { formatMoney } from "@/lib/domain/money";
 import { cn } from "@/lib/utils/cn";
+import { displayName, isInvited } from "@/lib/utils/person";
 import { paysSentence, type NamedPerson } from "./format";
 
 export interface PlanStep {
@@ -54,6 +56,9 @@ export function SettlePlan({
               const toMe = step.to.id === meId;
               const fromMe = step.from.id === meId;
               const recordable = memberIds.has(step.from.id) && memberIds.has(step.to.id);
+              // Only the person being paid can nudge the payer. Deleted accounts and invited
+              // placeholders have no inbox to remind.
+              const remindable = toMe && recordable && step.from.status !== "deleted" && !isInvited(step.from);
               return (
                 <li
                   key={`${step.from.id}-${step.to.id}`}
@@ -61,18 +66,23 @@ export function SettlePlan({
                 >
                   <span className="min-w-0">
                     <span className="block truncate text-body-sm">{paysSentence(step.from, step.to, meId)}</span>
-                    <span
-                      className={cn(
-                        "num block text-[1.125rem] font-bold tracking-[-0.01em]",
-                        toMe ? "text-owed" : fromMe ? "text-owe" : "text-ink",
-                      )}
-                    >
-                      {formatMoney(step.amountCents, currency)}
+                    <span className="flex flex-wrap items-center gap-x-1">
+                      <span
+                        className={cn(
+                          "num block text-[1.125rem] font-bold tracking-[-0.01em]",
+                          toMe ? "text-owed" : fromMe ? "text-owe" : "text-ink",
+                        )}
+                      >
+                        {formatMoney(step.amountCents, currency)}
+                      </span>
+                      {/* A nudge sits with the sentence; Record payment stays the one outlined action per row. */}
+                      {remindable ? <RemindButton toUserId={step.from.id} toName={displayName(step.from)} groupId={groupId} className="px-3" /> : null}
                     </span>
                   </span>
                   {recordable ? (
                     <Button
                       variant="secondary"
+                      className="shrink-0"
                       aria-label={`Record payment: ${paysSentence(step.from, step.to, meId)} ${formatMoney(step.amountCents, currency)}`}
                       onClick={() =>
                         setSheet({ open: true, prefill: { fromId: step.from.id, toId: step.to.id, amountCents: step.amountCents } })

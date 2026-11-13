@@ -8,6 +8,7 @@ export interface Mail {
   subject: string;
   text: string;
   html?: string;
+  headers?: Record<string, string>;
 }
 
 /** Every email sent to `to` this run, oldest first. */
@@ -37,6 +38,47 @@ export async function linkFor(to: string, path: string, { after = 0 }: { after?:
       { timeout: 10_000, message: `an email to ${to} linking to ${path}` },
     )
     .toBeTruthy();
+  const url = new URL(link!);
+  return url.pathname + url.search;
+}
+
+/**
+ * Waits for an email to `to` matching `match` (subject text or predicate) and returns the newest
+ * one. With `after`, only emails beyond the first `after` to that address count.
+ */
+export async function waitForMail(
+  to: string,
+  match: string | RegExp | ((m: Mail) => boolean),
+  { after = 0, timeout = 10_000 }: { after?: number; timeout?: number } = {},
+): Promise<Mail> {
+  const test =
+    typeof match === "function" ? match : (m: Mail) => (typeof match === "string" ? m.subject.includes(match) : match.test(m.subject));
+  let found: Mail | undefined;
+  await expect
+    .poll(
+      () => {
+        found = mailsTo(to).slice(after).reverse().find(test);
+        return Boolean(found);
+      },
+      { timeout, message: `an email to ${to} matching ${String(match)}` },
+    )
+    .toBe(true);
+  return found!;
+}
+
+/** The /unsubscribe link in a notification email's text, as path + query. */
+export function unsubscribeLink(mail: Mail): string {
+  const link = mail.text.match(/https?:\/\/[^\s"'<>]+\/unsubscribe\?[^\s"'<>]+/)?.[0];
+  expect(link, `an unsubscribe link in "${mail.subject}"`).toBeTruthy();
+  const url = new URL(link!);
+  return url.pathname + url.search;
+}
+
+/** The RFC 8058 one-click URL from the List-Unsubscribe header, as path + query. */
+export function oneClickLink(mail: Mail): string {
+  const header = mail.headers?.["List-Unsubscribe"] ?? "";
+  const link = header.match(/<([^>]+)>/)?.[1];
+  expect(link, `a List-Unsubscribe header in "${mail.subject}"`).toBeTruthy();
   const url = new URL(link!);
   return url.pathname + url.search;
 }

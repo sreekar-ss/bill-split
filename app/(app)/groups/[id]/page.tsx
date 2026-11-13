@@ -6,6 +6,7 @@ import { listNames, memberCount } from "@/components/groups/format";
 import { GroupHeaderActions } from "@/components/groups/group-header-actions";
 import { GroupLedger } from "@/components/groups/group-ledger";
 import { SettlePlan } from "@/components/groups/settle-plan";
+import { RecurringList } from "@/components/recurring/recurring-list";
 import { BalanceBeam, type BeamRow } from "@/components/ui/balance-beam";
 import { PageHeader, Section } from "@/components/ui/page";
 import { requireUser } from "@/lib/auth/session";
@@ -13,6 +14,7 @@ import { formatMoney } from "@/lib/domain/money";
 import { displayName } from "@/lib/utils/person";
 import { getGroup } from "@/lib/server/groups";
 import { orNotFound } from "@/lib/server/page";
+import { listRecurring } from "@/lib/server/recurring";
 
 type Props = { params: Promise<{ id: string }> };
 
@@ -31,7 +33,9 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
 export default async function GroupPage({ params }: Props) {
   const { id } = await params;
-  const { user, group } = await loadGroup(id);
+  // The session lookup is cached per request, so both queries run in parallel; a non-member gets a 404 from either.
+  const viewer = await requireUser();
+  const [{ user, group }, recurring] = await Promise.all([loadGroup(id), orNotFound(listRecurring(viewer.id, { groupId: id }))]);
   const meId = user.id;
   const solo = group.members.length < 2;
 
@@ -114,7 +118,13 @@ export default async function GroupPage({ params }: Props) {
         )}
       </aside>
 
+      {/* Main column on desktop (above the ledger); on mobile the order is balances, settle up, recurring, ledger. */}
       <div className="mt-8 min-w-0 lg:col-start-1 lg:row-start-2 lg:mt-6 lg:max-w-[720px]">
+        {recurring.length > 0 ? (
+          <Section title="Recurring">
+            <RecurringList items={recurring} />
+          </Section>
+        ) : null}
         <Section title="Expenses" action={totalSpent === 0 ? undefined : <span className="num hidden text-body-sm text-ink-muted lg:inline">{spent} in total</span>}>
           <GroupLedger group={group} meId={meId} />
         </Section>

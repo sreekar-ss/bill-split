@@ -6,12 +6,15 @@ import { AddExpenseButton } from "@/components/activity/add-expense-button";
 import { MonthlyFeed, sortByDate, type FeedItem } from "@/components/activity/feed";
 import { BalanceBreakdown } from "@/components/friends/balance-breakdown";
 import { RemoveFriendButton } from "@/components/friends/remove-friend-button";
+import { RecurringList } from "@/components/recurring/recurring-list";
 import { Avatar } from "@/components/ui/avatar";
 import { balancePhrase, Money } from "@/components/ui/money";
 import { EmptyState, Panel, Section } from "@/components/ui/page";
 import { requireUser } from "@/lib/auth/session";
+import { withRecurringFlags } from "@/lib/server/activity-recurring";
 import { getFriend } from "@/lib/server/friends";
 import { orNotFound } from "@/lib/server/page";
+import { listRecurring } from "@/lib/server/recurring";
 import { cn } from "@/lib/utils/cn";
 import { displayName, isInvited } from "@/lib/utils/person";
 
@@ -34,9 +37,15 @@ export default async function FriendPage({ params }: Params) {
   const name = displayName(friend);
   const invited = isInvited(friend);
 
-  const history: FeedItem[] = sortByDate<FeedItem>([
-    ...expenses.map((e) => ({ type: "expense" as const, ...e, friend: null })),
-    ...payments.map((p) => ({ type: "payment" as const, ...p })),
+  const [recurring, history] = await Promise.all([
+    // Direct schedules between the two of you (group schedules live on the group page).
+    listRecurring(user.id, { friendId: friend.id }),
+    withRecurringFlags<FeedItem>(
+      sortByDate<FeedItem>([
+        ...expenses.map((e) => ({ type: "expense" as const, ...e, friend: null })),
+        ...payments.map((p) => ({ type: "payment" as const, ...p })),
+      ]),
+    ),
   ]);
 
   const headline = !primary ? `You and ${name} are settled up` : primary.cents > 0 ? `${name} owes you` : `You owe ${name}`;
@@ -97,6 +106,12 @@ export default async function FriendPage({ params }: Params) {
           breakdown={breakdown}
         />
       </Panel>
+
+      {recurring.length > 0 ? (
+        <Section title="Recurring" className="mt-8">
+          <RecurringList items={recurring} />
+        </Section>
+      ) : null}
 
       {/* The shell's add button is already preset to this friend, so the section only offers one when empty. */}
       <Section title="Shared history" className="mt-8">

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { cache } from "react";
 import { categoryLabel } from "@/components/expenses/categories";
 import { ExpenseActions } from "@/components/expenses/expense-actions";
+import { ExpenseRecurring } from "@/components/expenses/expense-recurring";
 import { Avatar } from "@/components/ui/avatar";
 import { LedgerRow } from "@/components/ui/ledger";
 import { Money } from "@/components/ui/money";
@@ -134,6 +135,8 @@ export default async function ExpensePage({ params }: Props) {
             <dd className="font-medium">{METHOD_LABEL[e.splitMethod] ?? "Equally"}</dd>
           </div>
         </dl>
+
+        {e.recurring ? <ExpenseRecurring recurring={e.recurring} description={e.description} /> : null}
       </Panel>
 
       <div className="mt-4">

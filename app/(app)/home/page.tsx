@@ -8,6 +8,7 @@ import { BalanceBeam } from "@/components/ui/balance-beam";
 import { PageHeader, Section } from "@/components/ui/page";
 import { requireUser } from "@/lib/auth/session";
 import { getDashboard } from "@/lib/server/activity";
+import { withRecurringFlags } from "@/lib/server/activity-recurring";
 import { listFriends } from "@/lib/server/friends";
 import { displayName } from "@/lib/utils/person";
 
@@ -28,6 +29,9 @@ export default async function HomePage() {
       </div>
     );
   }
+
+  // The most recently recorded items, labelled when a recurring schedule added them.
+  const recent = await withRecurringFlags(dash.recent.slice(0, RECENT_LIMIT));
 
   // Only friends have a page; someone you share a group with but removed as a friend has no link.
   const friendIds = new Set(friends.map((f) => f.id));
@@ -76,11 +80,11 @@ export default async function HomePage() {
       </Section>
 
       <Section title="Recent activity" action={dash.recent.length > 0 ? <SectionLink href="/activity">All activity</SectionLink> : undefined}>
-        {dash.recent.length === 0 ? (
+        {recent.length === 0 ? (
           <p className="text-body-sm text-ink-muted">No expenses yet. Add the first one and we&apos;ll keep the tally.</p>
         ) : (
           // The most recently recorded items, shown in date order like every other ledger.
-          <FeedList items={sortByDate(dash.recent.slice(0, RECENT_LIMIT))} meId={user.id} label="Recent activity" />
+          <FeedList items={sortByDate(recent)} meId={user.id} label="Recent activity" />
         )}
       </Section>
     </div>

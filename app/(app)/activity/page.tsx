@@ -4,12 +4,13 @@ import { MonthlyFeed, sortByDate } from "@/components/activity/feed";
 import { EmptyState, PageHeader } from "@/components/ui/page";
 import { requireUser } from "@/lib/auth/session";
 import { listActivity } from "@/lib/server/activity";
+import { withRecurringFlags } from "@/lib/server/activity-recurring";
 
 export const metadata: Metadata = { title: "Activity" };
 
 export default async function ActivityPage() {
   const user = await requireUser();
-  const items = await listActivity(user.id);
+  const items = await withRecurringFlags(await listActivity(user.id));
 
   return (
     <div className="max-w-[720px]">

@@ -15,8 +15,10 @@ export const maxDuration = 300;
 export async function GET(request: NextRequest) {
   const secret = process.env.CRON_SECRET;
   const given = request.headers.get("authorization") ?? "";
-  const expected = `Bearer ${secret}`;
-  const ok = Boolean(secret) && given.length === expected.length && timingSafeEqual(Buffer.from(given), Buffer.from(expected));
+  // Compare bytes, not string lengths: a non-ASCII header can match in length but not in bytes.
+  const a = Buffer.from(given);
+  const b = Buffer.from(`Bearer ${secret}`);
+  const ok = Boolean(secret) && a.length === b.length && timingSafeEqual(a, b);
   if (!ok) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const now = new Date();

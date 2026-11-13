@@ -6,6 +6,8 @@ export interface EmailContent {
   subject: string;
   greeting: string;
   paragraphs: string[];
+  /** Secondary links, one per line above the button (e.g. "Pay Ana $30.00 with Venmo"). */
+  links?: { label: string; url: string }[];
   button?: { label: string; url: string };
   /** Small print under the button. */
   notes?: string[];
@@ -23,6 +25,7 @@ export function renderEmail(c: EmailContent) {
     c.greeting,
     "",
     ...c.paragraphs.flatMap((p) => [p, ""]),
+    ...(c.links?.length ? [...c.links.map((l) => `${l.label}: ${l.url}`), ""] : []),
     ...(c.button ? [`${c.button.label}: ${c.button.url}`, ""] : []),
     ...(c.notes ?? []).flatMap((n) => [n, ""]),
     ...(c.unsubscribeUrl ? [`Unsubscribe from these emails: ${c.unsubscribeUrl}`] : []),
@@ -32,6 +35,9 @@ export function renderEmail(c: EmailContent) {
 
   const para = (p: string) => `<p style="margin:0 0 16px;font-size:16px;line-height:1.5">${esc(p)}</p>`;
   const note = (n: string) => `<p style="margin:0 0 10px;font-size:14px;line-height:1.5;color:#55627a">${esc(n)}</p>`;
+  const links = (c.links ?? [])
+    .map((l) => `<p style="margin:0 0 12px;font-size:16px;line-height:1.5"><a href="${esc(l.url)}" style="color:#13213f;font-weight:600">${esc(l.label)}</a></p>`)
+    .join("");
   const button = c.button
     ? `<p style="margin:4px 0 20px"><a href="${esc(c.button.url)}" style="display:inline-block;background:#13213f;color:#ffffff;text-decoration:none;font-weight:600;padding:12px 20px;border-radius:10px">${esc(c.button.label)}</a></p>`
     : "";
@@ -39,9 +45,9 @@ export function renderEmail(c: EmailContent) {
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td align="center" style="padding:32px 16px">
 <table role="presentation" width="100%" style="max-width:480px;background:#ffffff;border:1px solid #d3dcd4;border-radius:20px" cellpadding="0" cellspacing="0"><tr><td style="padding:28px">
 <p style="margin:0 0 20px;font-size:18px;font-weight:700">BillSplit</p>
-${para(c.greeting)}${c.paragraphs.map(para).join("")}${button}${(c.notes ?? []).map(note).join("")}
+${para(c.greeting)}${c.paragraphs.map(para).join("")}${links}${button}${(c.notes ?? []).map(note).join("")}
 </td></tr></table>
-<p style="margin:16px 0 0;font-size:12px;color:#55627a">Sent to ${esc(c.to)}${c.unsubscribeUrl ? ` · <a href="${esc(c.unsubscribeUrl)}" style="color:#55627a">Unsubscribe from these emails</a>` : ""}</p>
+<p style="margin:16px 0 0;font-size:12px;color:#55627a">Sent to ${esc(c.to)}</p>${c.unsubscribeUrl ? `<p style="margin:6px 0 0;font-size:12px"><a href="${esc(c.unsubscribeUrl)}" style="color:#55627a">Unsubscribe from these emails</a></p>` : ""}
 </td></tr></table></body></html>`;
   const headers = c.unsubscribeUrl
     ? { "List-Unsubscribe": `<${c.oneClickUrl ?? c.unsubscribeUrl}>`, "List-Unsubscribe-Post": "List-Unsubscribe=One-Click" }

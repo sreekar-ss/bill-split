@@ -38,7 +38,8 @@ export function EmailStatus({ verified, email }: { verified: boolean; email: str
   }
 
   return (
-    <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1">
+    // id: the "Resend the confirmation link" link in Email notifications jumps here.
+    <div id="email-status" className="mt-1 flex scroll-mt-6 flex-wrap items-center gap-x-3 gap-y-1">
       {/* Words carry the state; the money colours (owe/owed) stay reserved for balances. */}
       <p className="inline-flex items-center gap-1.5 text-meta font-medium text-ink">
         <CircleAlert className="size-4 text-ink-muted" aria-hidden />

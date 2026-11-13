@@ -1,10 +1,11 @@
 import "server-only";
 import { fromDateInput, toDateInput } from "@/lib/domain/dates";
-import { anchorFor, describeSchedule, nextOccurrence, type Frequency } from "@/lib/domain/recurrence";
+import { anchorFor, describeSchedule, endsOnTooSoon, firstRepeatOn, nextOccurrence, type Frequency } from "@/lib/domain/recurrence";
 import { expenseSchema, recurrenceSchema } from "@/lib/validation";
 import { db } from "./db";
 import { AppError, notFound } from "./errors";
 import { createExpense } from "./expenses";
+import { areFriends } from "./friends";
 import { notifyExpenseCreated } from "./notifications";
 import { parse } from "./parse";
 
@@ -13,15 +14,27 @@ const MAX_CATCH_UP = 6;
 
 /**
  * Create an expense and make it repeat. The first occurrence is the expense itself (on its date);
- * the schedule then continues from the next occurrence.
+ * the schedule then continues from firstRepeatOn (never in the past).
  */
-export async function createRecurringExpense(userId: string, expenseInput: unknown, recurrenceInput: unknown) {
+export async function createRecurringExpense(
+  userId: string,
+  expenseInput: unknown,
+  recurrenceInput: unknown,
+  today = toDateInput(new Date()),
+) {
   const data = parse(expenseSchema, expenseInput);
   const rec = parse(recurrenceSchema, recurrenceInput);
   if (rec.endsOn && rec.endsOn < data.date) {
     throw new AppError("The end date is before the first date.", "VALIDATION", { endsOn: "Choose a date on or after the expense date." });
   }
   const schedule = { frequency: rec.frequency as Frequency, interval: rec.interval, anchorDay: anchorFor(rec.frequency, data.date) };
+  const nextRunOn = firstRepeatOn(schedule, data.date, today);
+  if (rec.endsOn && rec.endsOn < nextRunOn) {
+    // It would end before it ever repeats.
+    throw new AppError("The end date is before the next repeat.", "VALIDATION", {
+      endsOn: endsOnTooSoon(nextRunOn),
+    });
+  }
 
   // Validate + create the first occurrence through the normal path (authorization, split math).
   const first = await createExpense(userId, data);
@@ -43,7 +56,7 @@ export async function createRecurringExpense(userId: string, expenseInput: unkno
       frequency: schedule.frequency,
       interval: schedule.interval,
       anchorDay: schedule.anchorDay,
-      nextRunOn: fromDateInput(nextOccurrence(schedule, data.date)),
+      nextRunOn: fromDateInput(nextRunOn),
       endsOn: rec.endsOn ? fromDateInput(rec.endsOn) : null,
       lastRunOn: fromDateInput(data.date),
     },
@@ -102,6 +115,8 @@ export async function listRecurring(userId: string, ctx: { groupId?: string; fri
     paused: Boolean(r.pausedAt),
     lastError: r.lastError,
     paidBy: payers.get(r.paidById) ?? { id: r.paidById, name: "Former member", status: "deleted" },
+    /** True when the viewer pays, so lists can say "You pay". */
+    paidByMe: r.paidById === userId,
     createdBy: r.createdBy.name,
   }));
 }
@@ -127,6 +142,15 @@ export async function stopRecurring(userId: string, id: string) {
   await db.recurringExpense.update({ where: { id }, data: { stoppedAt: new Date() } });
 }
 
+async function creatorBlocked(r: { groupId: string | null; friendId: string | null; createdById: string }): Promise<string | null> {
+  if (r.groupId) {
+    const member = await db.groupMember.findUnique({ where: { groupId_userId: { groupId: r.groupId, userId: r.createdById } }, select: { userId: true } });
+    return member ? null : "The person who set this up is no longer in the group.";
+  }
+  if (r.friendId && !(await areFriends(r.createdById, r.friendId))) return "You two are no longer friends on BillSplit.";
+  return null;
+}
+
 /**
  * Daily job: create every occurrence that is due (on or before `today`). Idempotent — each
  * occurrence has a unique recurrenceKey, so re-running the same day creates nothing new.
@@ -140,6 +164,14 @@ export async function runDueRecurring(today = toDateInput(new Date())) {
   let created = 0;
   let paused = 0;
   for (const r of due) {
+    // Occurrences are created as the person who set the schedule up. If they're no longer in the
+    // group (or the friendship ended), no amount of resuming can fix it, so say exactly that.
+    const blocked = await creatorBlocked(r);
+    if (blocked) {
+      await db.recurringExpense.update({ where: { id: r.id }, data: { pausedAt: new Date(), lastError: blocked } });
+      paused++;
+      continue;
+    }
     const schedule = { frequency: r.frequency as Frequency, interval: r.interval, anchorDay: r.anchorDay };
     const endsOn = r.endsOn ? toDateInput(r.endsOn) : null;
     let date = toDateInput(r.nextRunOn);
@@ -163,7 +195,7 @@ export async function runDueRecurring(today = toDateInput(new Date())) {
             notes: r.notes ?? undefined,
             split: { method: r.splitMethod, entries: r.splitEntries },
           },
-          { recurringId: r.id, recurrenceKey: `${r.id}:${date}` },
+          { recurringId: r.id, recurrenceKey: `${r.id}:${date}`, currency: r.currency },
         );
         created++;
         await notifyExpenseCreated(e.id, "", { recurring: true });

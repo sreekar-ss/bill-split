@@ -70,6 +70,16 @@ export async function registerElsewhere(browser: Browser, user: TestUser) {
   return user;
 }
 
+/** Opens a new browser context signed in as `user` (on Home). Close it with `page.context().close()`. */
+export async function signedIn(browser: Browser, user: TestUser): Promise<Page> {
+  const context = await browser.newContext();
+  const page = await context.newPage();
+  await page.goto("/login");
+  await login(page, user.email, user.password);
+  await expect(page).toHaveURL(/\/home$/);
+  return page;
+}
+
 /** Registers `main` on `page` plus `others` in throwaway contexts. */
 export async function setupUsers(page: Page, browser: Browser, info: TestInfo, mainName: string, ...otherNames: string[]) {
   const others: TestUser[] = [];

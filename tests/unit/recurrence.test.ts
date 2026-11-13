@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { anchorFor, describeSchedule, nextOccurrence, occurrencesBetween } from "@/lib/domain/recurrence";
+import { anchorFor, describeSchedule, endsOnTooSoon, firstRepeatOn, nextOccurrence, occurrencesBetween } from "@/lib/domain/recurrence";
 
 describe("weekly", () => {
   const mondays = { frequency: "weekly" as const, interval: 1, anchorDay: 1 };
@@ -48,5 +48,20 @@ describe("helpers", () => {
     expect(describeSchedule({ frequency: "monthly", interval: 1, anchorDay: 1 })).toBe("Monthly on the 1st");
     expect(describeSchedule({ frequency: "monthly", interval: 1, anchorDay: 31 })).toBe("Monthly on the last day");
     expect(describeSchedule({ frequency: "monthly", interval: 1, anchorDay: 22 })).toBe("Monthly on the 22nd");
+  });
+});
+
+describe("firstRepeatOn", () => {
+  const weekly = { frequency: "weekly" as const, interval: 1, anchorDay: 4 }; // Thursdays
+  it("is the next occurrence when that's today or later", () => {
+    expect(firstRepeatOn(weekly, "2026-11-12", "2026-11-12")).toBe("2026-11-19");
+    expect(firstRepeatOn(weekly, "2026-11-05", "2026-11-12")).toBe("2026-11-12");
+  });
+  it("skips periods that already passed for a back-dated start", () => {
+    expect(firstRepeatOn(weekly, "2026-10-22", "2026-11-13")).toBe("2026-11-19");
+    expect(firstRepeatOn({ frequency: "monthly", interval: 1, anchorDay: 1 }, "2026-01-01", "2026-11-12")).toBe("2026-12-01");
+  });
+  it("names the earliest end date in the error", () => {
+    expect(endsOnTooSoon("2026-11-19")).toBe("It would end before it repeats. Choose Nov 19, 2026 or later, or leave it empty.");
   });
 });

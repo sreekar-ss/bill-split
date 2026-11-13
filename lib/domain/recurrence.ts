@@ -48,6 +48,23 @@ export function nextOccurrence(s: Schedule, after: string): string {
   return fromUTC(Date.UTC(y, m0, Math.min(s.anchorDay, daysInMonth(y, m0))));
 }
 
+/**
+ * The first repeat a new schedule creates: the first occurrence after its start date, moved forward
+ * to `today` or later. A back-dated start doesn't back-fill the periods that already passed (they
+ * may have been recorded by hand, and each would email everyone), the same rule as resuming.
+ */
+export function firstRepeatOn(s: Schedule, startDate: string, today: string): string {
+  let next = nextOccurrence(s, startDate);
+  while (next < today) next = nextOccurrence(s, next);
+  return next;
+}
+
+/** The field error when an end date comes before the first repeat (it would never repeat). */
+export function endsOnTooSoon(firstRepeat: string): string {
+  const day = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" }).format(new Date(toUTC(firstRepeat)));
+  return `It would end before it repeats. Choose ${day} or later, or leave it empty.`;
+}
+
 /** All occurrences d with from < d <= until, capped at `max` (to bound catch-up after downtime). */
 export function occurrencesBetween(s: Schedule, from: string, until: string, max = 12): string[] {
   const out: string[] = [];

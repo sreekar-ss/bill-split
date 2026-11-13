@@ -1,11 +1,12 @@
 "use client";
 
 import { useState } from "react";
+import { RemindButton } from "@/components/notifications/remind-button";
 import { SettleUpSheet, type SettleUpPerson, type SettleUpSheetProps } from "@/components/payments/settle-up-sheet";
 import { Button } from "@/components/ui/button";
 import { balancePhrase } from "@/components/ui/money";
 import type { FriendDetail } from "@/lib/server/friends";
-import { displayName } from "@/lib/utils/person";
+import { displayName, isInvited } from "@/lib/utils/person";
 
 type Person = { id: string; name: string };
 type Entry = FriendDetail["breakdown"][number];
@@ -22,8 +23,21 @@ function contextKey(entry: Entry) {
 }
 
 /**
+ * Where "Remind" goes: every group the friend owes you in, plus one direct entry. Direct balances are
+ * per currency but a reminder is one per person (it asks about the largest), so it sits on that row.
+ */
+function remindableKeys(entries: Entry[], friend: SettleUpPerson) {
+  // A deleted account or an invited placeholder has no inbox to remind.
+  if (friend.status === "deleted" || isInvited(friend)) return new Set<string>();
+  const owing = entries.filter((e) => e.cents > 0);
+  const largestDirect = owing.filter((e) => e.context.kind === "direct").sort((a, b) => b.cents - a.cents)[0];
+  return new Set(owing.filter((e) => e.context.kind === "group" || e === largestDirect).map(contextKey));
+}
+
+/**
  * Explains the total with a friend, one line per context (each group, plus direct expenses), each
- * with its own "Settle up", because payments are recorded inside a context.
+ * with its own "Settle up", because payments are recorded inside a context. Where the friend owes
+ * you, the row also offers "Remind".
  */
 export function BalanceBreakdown({
   me,
@@ -40,6 +54,7 @@ export function BalanceBreakdown({
   const entries = breakdown.filter((b) => b.cents !== 0);
   if (entries.length === 0) return null;
   const friendName = displayName(friend);
+  const remindable = remindableKeys(entries, friend);
 
   const sheetProps = (entry: Entry): Omit<SettleUpSheetProps, "open" | "onOpenChange"> => {
     const friendPays = entry.cents > 0;
@@ -67,16 +82,26 @@ export function BalanceBreakdown({
                 <span className="font-semibold">{contextName(entry)}:</span>{" "}
                 <span className={entry.cents > 0 ? "text-owed" : "text-owe"}>{sentence}</span>
               </p>
-              <Button
-                variant={entries.length === 1 ? "primary" : "secondary"}
-                aria-label={`Settle up in ${contextName(entry)}`}
-                onClick={() => {
-                  setSettling(entry);
-                  setOpen(true);
-                }}
-              >
-                Settle up
-              </Button>
+              {/* Named group, so screen readers hear which context "Remind" and "Settle up" act on. */}
+              <div role="group" aria-label={contextName(entry)} className="flex flex-wrap items-center gap-2">
+                {remindable.has(key) ? (
+                  <RemindButton
+                    toUserId={friend.id}
+                    toName={friendName}
+                    {...(entry.context.kind === "group" ? { groupId: entry.context.groupId } : { friendId: friend.id })}
+                  />
+                ) : null}
+                <Button
+                  variant={entries.length === 1 ? "primary" : "secondary"}
+                  aria-label={`Settle up in ${contextName(entry)}`}
+                  onClick={() => {
+                    setSettling(entry);
+                    setOpen(true);
+                  }}
+                >
+                  Settle up
+                </Button>
+              </div>
             </li>
           );
         })}

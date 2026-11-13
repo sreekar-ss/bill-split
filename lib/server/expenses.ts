@@ -64,6 +64,11 @@ function buildShares(data: ParsedExpense, participants: string[], direct: boolea
 export interface ExpenseOrigin {
   recurringId?: string;
   recurrenceKey?: string;
+  /**
+   * The schedule's currency. A direct expense otherwise takes the creator's *current* default
+   * currency, which may have changed since the schedule was set up. (Groups lock their currency.)
+   */
+  currency?: string;
 }
 
 export async function createExpense(userId: string, input: ExpenseInput | unknown, origin: ExpenseOrigin = {}) {
@@ -74,7 +79,7 @@ export async function createExpense(userId: string, input: ExpenseInput | unknow
     data: {
       description: data.description,
       amountCents: data.amountCents,
-      currency: ctx.currency,
+      currency: ctx.direct && origin.currency ? origin.currency : ctx.currency,
       category: data.category,
       date: fromDateInput(data.date),
       notes: data.notes || null,
@@ -97,7 +102,7 @@ async function loadAuthorized(userId: string, expenseId: string) {
     include: {
       splits: { select: { userId: true, amountCents: true, percentage: true, shares: true } },
       recurring: {
-        select: { id: true, frequency: true, interval: true, anchorDay: true, nextRunOn: true, endsOn: true, pausedAt: true, stoppedAt: true },
+        select: { id: true, frequency: true, interval: true, anchorDay: true, nextRunOn: true, endsOn: true, pausedAt: true, stoppedAt: true, lastError: true },
       },
       paidBy: { select: { id: true, name: true, email: true, status: true } },
       createdBy: { select: { id: true, name: true, status: true } },
@@ -143,6 +148,8 @@ export async function getExpense(userId: string, expenseId: string) {
           nextRunOn: toDateInput(e.recurring.nextRunOn),
           endsOn: e.recurring.endsOn ? toDateInput(e.recurring.endsOn) : null,
           state: e.recurring.stoppedAt ? ("stopped" as const) : e.recurring.pausedAt ? ("paused" as const) : ("active" as const),
+          /** Why the daily job paused it (e.g. someone left the group), when it paused itself. */
+          lastError: e.recurring.pausedAt && !e.recurring.stoppedAt ? e.recurring.lastError : null,
         }
       : null,
     createdAt: e.createdAt,

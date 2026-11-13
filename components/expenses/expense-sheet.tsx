@@ -19,6 +19,7 @@ import { cn } from "@/lib/utils/cn";
 import { CATEGORY_OPTIONS, currencyName, currencySymbol, isCategory } from "./categories";
 import { SplitEditor, SplitStatusLine, type Participant } from "./split-editor";
 import { emptyDraft, evaluateSplit, type SplitDraft, type ValueMethod } from "./split-math";
+import { endsOnError, NO_REPEAT, RepeatFields, toRecurrence, type RepeatDraft } from "./repeat-fields";
 import { runAction } from "@/lib/client/run-action";
 import { displayName } from "@/lib/utils/person";
 
@@ -51,7 +52,7 @@ interface Target {
   participants: Participant[];
 }
 
-type FieldKey = "amount" | "description" | "paidById" | "date" | "category" | "notes" | "split" | "target";
+type FieldKey = "amount" | "description" | "paidById" | "date" | "category" | "notes" | "split" | "target" | "interval" | "endsOn";
 
 function buildTargets(contexts: ExpenseContexts, editing?: ExpenseDetail): Target[] {
   const me = { id: contexts.me.id, name: contexts.me.name };
@@ -145,7 +146,7 @@ function toFieldKey(serverKey: string): FieldKey | null {
   if (serverKey === "amountCents") return "amount";
   if (serverKey.startsWith("split")) return "split";
   if (serverKey === "groupId" || serverKey === "friendId") return "target";
-  if (["description", "paidById", "date", "category", "notes"].includes(serverKey)) return serverKey as FieldKey;
+  if (["description", "paidById", "date", "category", "notes", "interval", "endsOn"].includes(serverKey)) return serverKey as FieldKey;
   return null;
 }
 
@@ -166,6 +167,7 @@ function ExpenseSheetSession({ onOpenChange, contexts, preset, editing }: Expens
   const [notes, setNotes] = useState(editing?.notes ?? "");
   const [notesOpen, setNotesOpen] = useState(Boolean(editing?.notes));
   const [draft, setDraft] = useState<SplitDraft>(() => (editing ? draftFromExpense(editing, participantIds) : emptyDraft(participantIds)));
+  const [repeat, setRepeat] = useState<RepeatDraft>(NO_REPEAT);
   const [errors, setErrors] = useState<Partial<Record<FieldKey, string>>>({});
   const [formError, setFormError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
@@ -173,6 +175,8 @@ function ExpenseSheetSession({ onOpenChange, contexts, preset, editing }: Expens
   const descriptionRef = useRef<HTMLInputElement>(null);
   const amountRef = useRef<HTMLInputElement>(null);
   const notesRef = useRef<HTMLTextAreaElement>(null);
+  const endsOnRef = useRef<HTMLInputElement>(null);
+  const intervalRef = useRef<HTMLSelectElement>(null);
 
   const currency = target?.currency ?? "USD";
   const trimmedAmount = amountText.trim();
@@ -226,9 +230,13 @@ function ExpenseSheetSession({ onOpenChange, contexts, preset, editing }: Expens
     const local: Partial<Record<FieldKey, string>> = {};
     if (!description.trim()) local.description = "Describe the expense.";
     if (!date) local.date = "Choose a date.";
-    if (local.description || local.date) {
+    const recurrence = editing ? undefined : toRecurrence(repeat);
+    const endsOnProblem = recurrence ? endsOnError(repeat, date) : undefined;
+    if (endsOnProblem) local.endsOn = endsOnProblem;
+    if (local.description || local.date || local.endsOn) {
       setErrors(local);
       if (local.description) descriptionRef.current?.focus();
+      else if (local.endsOn) endsOnRef.current?.focus();
       return;
     }
 
@@ -246,7 +254,7 @@ function ExpenseSheetSession({ onOpenChange, contexts, preset, editing }: Expens
     startTransition(async () => {
       const result = editing
         ? await runAction(() => updateExpenseAction(editing.id, input))
-        : await runAction(() => createExpenseAction(input));
+        : await runAction(() => createExpenseAction(input, recurrence));
       if (!result.ok) {
         const mapped: Partial<Record<FieldKey, string>> = {};
         for (const [key, message] of Object.entries(result.fieldErrors ?? {})) {
@@ -259,9 +267,11 @@ function ExpenseSheetSession({ onOpenChange, contexts, preset, editing }: Expens
         setFormError(shownOnField ? null : result.error);
         if (mapped.amount) amountRef.current?.focus();
         else if (mapped.description) descriptionRef.current?.focus();
+        else if (mapped.interval) intervalRef.current?.focus();
+        else if (mapped.endsOn) endsOnRef.current?.focus();
         return;
       }
-      toast.success("Expense saved");
+      toast.success(recurrence ? "Recurring expense saved" : "Expense saved");
       onOpenChange(false);
     });
   }
@@ -326,6 +336,12 @@ function ExpenseSheetSession({ onOpenChange, contexts, preset, editing }: Expens
               </Select>
             )}
           </Field>
+        ) : null}
+
+        {editing?.recurring && editing.recurring.state !== "stopped" ? (
+          <p className="rounded-[10px] border border-rule bg-paper px-3 py-2 text-body-sm text-ink-muted">
+            This expense repeats. Changes here apply to this one only, not to the ones still to come.
+          </p>
         ) : null}
 
         {target ? (
@@ -414,12 +430,28 @@ function ExpenseSheetSession({ onOpenChange, contexts, preset, editing }: Expens
                     value={date}
                     onChange={(e) => {
                       clearError("date");
+                      clearError("endsOn");
                       setDate(e.target.value);
                     }}
                   />
                 )}
               </Field>
             </div>
+
+            {!editing ? (
+              <RepeatFields
+                value={repeat}
+                date={date}
+                errors={{ interval: errors.interval, endsOn: errors.endsOn }}
+                endsOnRef={endsOnRef}
+                intervalRef={intervalRef}
+                onChange={(next) => {
+                  if (next.interval !== repeat.interval || next.frequency !== repeat.frequency) clearError("interval");
+                  if (next.endsOn !== repeat.endsOn || next.frequency !== repeat.frequency) clearError("endsOn");
+                  setRepeat(next);
+                }}
+              />
+            ) : null}
 
             <Field label="Category" error={errors.category}>
               {(p) => (

@@ -6,6 +6,7 @@ import { expenseSchema, type ExpenseInput } from "@/lib/validation";
 import { db } from "./db";
 import { AppError, notFound } from "./errors";
 import { areFriends } from "./friends";
+import { assertNotArchived } from "./groups";
 import { parse } from "./parse";
 
 type ParsedExpense = ReturnType<typeof expenseSchema.parse>;
@@ -15,9 +16,12 @@ async function resolveContext(userId: string, data: Pick<ParsedExpense, "groupId
   if (data.groupId) {
     const group = await db.group.findFirst({
       where: { id: data.groupId, members: { some: { userId } } },
-      select: { currency: true, members: { select: { userId: true } } },
+      select: { currency: true, archivedAt: true, members: { select: { userId: true } } },
     });
     if (!group) throw notFound("group");
+    if (group.archivedAt) {
+      throw new AppError("This group is archived. Unarchive it in the group's settings to add or change expenses.", "CONFLICT");
+    }
     return { participants: group.members.map((m) => m.userId), currency: group.currency, direct: false };
   }
   const friendId = data.friendId!;
@@ -73,26 +77,51 @@ export interface ExpenseOrigin {
 
 export async function createExpense(userId: string, input: ExpenseInput | unknown, origin: ExpenseOrigin = {}) {
   const data = parse(expenseSchema, input);
+  // Idempotent re-send (offline queue, double tap): the same clientId returns the expense already saved.
+  if (data.clientId) {
+    const existing = await findByClientId(userId, data.clientId);
+    if (existing) return existing;
+  }
   const ctx = await resolveContext(userId, data);
   const rows = buildShares(data, ctx.participants, ctx.direct);
-  return db.expense.create({
-    data: {
-      description: data.description,
-      amountCents: data.amountCents,
-      currency: ctx.direct && origin.currency ? origin.currency : ctx.currency,
-      category: data.category,
-      date: fromDateInput(data.date),
-      notes: data.notes || null,
-      splitMethod: data.split.method,
-      groupId: data.groupId ?? null,
-      paidById: data.paidById,
-      createdById: userId,
-      recurringId: origin.recurringId ?? null,
-      recurrenceKey: origin.recurrenceKey ?? null,
-      splits: { create: rows },
-    },
-    select: { id: true, groupId: true },
-  });
+  try {
+    return await insertExpense();
+  } catch (error) {
+    // Two sends racing with the same clientId: the loser returns the winner's expense.
+    const duplicate = typeof error === "object" && error !== null && (error as { code?: string }).code === "P2002";
+    const winner = duplicate && data.clientId ? await findByClientId(userId, data.clientId) : null;
+    if (winner) return winner;
+    throw error;
+  }
+
+  function insertExpense() {
+    return db.expense.create({
+      data: {
+        description: data.description,
+        amountCents: data.amountCents,
+        currency: ctx.direct && origin.currency ? origin.currency : ctx.currency,
+        category: data.category,
+        date: fromDateInput(data.date),
+        notes: data.notes || null,
+        splitMethod: data.split.method,
+        groupId: data.groupId ?? null,
+        paidById: data.paidById,
+        createdById: userId,
+        recurringId: origin.recurringId ?? null,
+        recurrenceKey: origin.recurrenceKey ?? null,
+        clientId: data.clientId ?? null,
+        splits: { create: rows },
+      },
+      select: { id: true, groupId: true },
+    });
+  }
+}
+
+async function findByClientId(userId: string, clientId: string) {
+  const e = await db.expense.findUnique({ where: { clientId }, select: { id: true, groupId: true, createdById: true } });
+  if (!e) return null;
+  if (e.createdById !== userId) throw new AppError("That expense couldn't be saved. Try again.", "CONFLICT");
+  return { id: e.id, groupId: e.groupId };
 }
 
 /** Loads an expense the user may see, plus which context it belongs to. */
@@ -226,6 +255,7 @@ function assertFormerMembersUnchanged(
 
 export async function deleteExpense(userId: string, expenseId: string) {
   const e = await loadAuthorized(userId, expenseId);
+  if (e.groupId) await assertNotArchived(e.groupId);
   await db.expense.delete({ where: { id: expenseId } });
   return { groupId: e.groupId, friendId: e.group ? undefined : e.splits.find((s) => s.userId !== userId)?.userId };
 }

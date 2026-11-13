@@ -4,6 +4,7 @@ import { paymentSchema } from "@/lib/validation";
 import { db } from "./db";
 import { AppError, notFound } from "./errors";
 import { areFriends } from "./friends";
+import { assertNotArchived } from "./groups";
 import { parse } from "./parse";
 
 /** Record that `fromUserId` paid `toUserId`. Partial amounts are fine; balances are derived. */
@@ -17,6 +18,7 @@ export async function recordPayment(userId: string, input: unknown) {
       select: { currency: true, members: { select: { userId: true } } },
     });
     if (!group) throw notFound("group");
+    await assertNotArchived(data.groupId);
     const ids = new Set(group.members.map((m) => m.userId));
     if (!ids.has(data.fromUserId) || !ids.has(data.toUserId)) {
       throw new AppError("Both people must be members of this group.", "VALIDATION");
@@ -60,6 +62,7 @@ export async function deletePayment(userId: string, paymentId: string) {
   if (!p) throw notFound("payment");
   const allowed = p.group ? p.group.members.some((m) => m.userId === userId) : p.fromUserId === userId || p.toUserId === userId;
   if (!allowed) throw notFound("payment");
+  if (p.groupId) await assertNotArchived(p.groupId);
   await db.settlement.delete({ where: { id: paymentId } });
   return { groupId: p.groupId, friendId: p.groupId ? undefined : p.fromUserId === userId ? p.toUserId : p.fromUserId };
 }

@@ -88,15 +88,29 @@ export const deleteAccountSchema = z.object({
   password: z.string().min(1, "Enter your password to confirm."),
 });
 
+/** One emoji (incl. skin tones / ZWJ sequences / flags), or "" to clear. */
+const emoji = z
+  .string()
+  .trim()
+  .max(32)
+  .refine(
+    (v) => v === "" || /^(?:\p{Extended_Pictographic}|\p{Regional_Indicator}{2})(?:\u{FE0F}|[\u{1F3FB}-\u{1F3FF}]|\u200D\p{Extended_Pictographic}\u{FE0F}?)*$/u.test(v),
+    "Choose a single emoji.",
+  );
+
 export const groupSchema = z.object({
   name: z.string().trim().min(1, "Give the group a name.").max(60, "Keep the name under 60 characters."),
   currency: z.enum(SUPPORTED_CURRENCIES).optional(),
+  /** The group's emoji; omit to keep it, "" to remove it. */
+  icon: emoji.optional(),
 });
 
 export const emailSchema = z.object({ email });
 
 export const expenseSchema = z
   .object({
+    /** Client-generated UUID for queued/offline saves (idempotency); ignored on update. */
+    clientId: z.string().uuid().optional(),
     groupId: id.optional(),
     friendId: id.optional(),
     description: z.string().trim().min(1, "Describe the expense.").max(100, "Keep the description under 100 characters."),

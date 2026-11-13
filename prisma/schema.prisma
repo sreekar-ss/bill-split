@@ -72,6 +72,8 @@ model Group {
   /// Bump to invalidate the group's current invite link (links are HMAC(groupId:version)).
   inviteVersion Int     @default(0)
   inviteEnabled Boolean @default(true)
+  /// Finished trips: hidden from lists and from "add expense" until unarchived. `icon` holds the group's emoji.
+  archivedAt  DateTime?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -119,6 +121,8 @@ model Expense {
   /// Set when created by a recurring schedule; recurrenceKey = "<recurringId>:<yyyy-mm-dd>" prevents duplicates.
   recurringId   String?
   recurrenceKey String?  @unique
+  /// Client-generated id for offline/queued saves: re-sending the same expense never duplicates it.
+  clientId      String?  @unique
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 

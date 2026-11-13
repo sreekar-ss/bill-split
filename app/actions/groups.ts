@@ -1,6 +1,6 @@
 "use server";
 
-import { addMemberByEmail, createGroup, deleteGroup, removeMember, updateGroup } from "@/lib/server/groups";
+import { addMemberByEmail, archiveGroup, createGroup, deleteGroup, removeMember, unarchiveGroup, updateGroup } from "@/lib/server/groups";
 import { authed } from "./run";
 
 export async function createGroupAction(input: { name: string; currency?: string }) {
@@ -10,7 +10,7 @@ export async function createGroupAction(input: { name: string; currency?: string
   });
 }
 
-export async function updateGroupAction(groupId: string, input: { name: string; currency?: string }) {
+export async function updateGroupAction(groupId: string, input: { name: string; currency?: string; icon?: string }) {
   return authed(async (user) => {
     await updateGroup(user.id, groupId, input);
   });
@@ -35,4 +35,12 @@ export async function deleteGroupAction(groupId: string) {
   return authed(async (user) => {
     await deleteGroup(user.id, groupId);
   });
+}
+
+export async function archiveGroupAction(groupId: string) {
+  return authed((user) => archiveGroup(user.id, groupId));
+}
+
+export async function unarchiveGroupAction(groupId: string) {
+  return authed((user) => unarchiveGroup(user.id, groupId));
 }

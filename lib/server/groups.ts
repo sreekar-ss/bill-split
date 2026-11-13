@@ -29,6 +29,8 @@ export async function listGroups(userId: string) {
           id: true,
           name: true,
           currency: true,
+          icon: true,
+          archivedAt: true,
           updatedAt: true,
           _count: { select: { members: true } },
           members: { select: { user: { select: { id: true, name: true, status: true } } }, orderBy: { joinedAt: "asc" }, take: 5 },
@@ -51,6 +53,8 @@ export async function listGroups(userId: string) {
         id: group.id,
         name: group.name,
         currency: group.currency,
+        icon: group.icon,
+        archived: Boolean(group.archivedAt),
         memberCount: group._count.members,
         memberPreview: group.members.map((m) => m.user),
         myNetCents: nets.get(userId) ?? 0,
@@ -84,6 +88,8 @@ export async function getGroup(userId: string, groupId: string) {
       currency: true,
       createdById: true,
       createdAt: true,
+      icon: true,
+      archivedAt: true,
       members: { select: { role: true, joinedAt: true, user: { select: { ...userSummary, ...paymentHandles } } }, orderBy: { joinedAt: "asc" } },
       expenses: {
         select: {
@@ -141,6 +147,8 @@ export async function getGroup(userId: string, groupId: string) {
     name: group.name,
     currency: group.currency,
     createdById: group.createdById,
+    icon: group.icon,
+    archived: Boolean(group.archivedAt),
     isAdmin: group.members.some((m) => m.user.id === userId && m.role === "admin") || group.createdById === userId,
     /** The currency is fixed once anything has been recorded in it. */
     currencyLocked: group.expenses.length + group.settlements.length > 0,
@@ -198,9 +206,39 @@ export async function updateGroup(userId: string, groupId: string, input: unknow
   }
   return db.group.update({
     where: { id: groupId },
-    data: { name: data.name, ...(changesCurrency ? { currency: data.currency } : {}) },
-    select: { id: true, name: true, currency: true },
+    data: {
+      name: data.name,
+      ...(changesCurrency ? { currency: data.currency } : {}),
+      ...(data.icon !== undefined ? { icon: data.icon || null } : {}),
+    },
+    select: { id: true, name: true, currency: true, icon: true },
   });
+}
+
+/**
+ * Archive a finished group (any member): hidden from lists and "add expense", read-only until
+ * unarchived. Only once everyone is settled, so nobody's balance disappears from view.
+ */
+export async function archiveGroup(userId: string, groupId: string) {
+  await assertGroupMember(groupId, userId);
+  const { nets } = await loadGroupLedger(groupId);
+  if ([...nets.values()].some((c) => c !== 0)) {
+    throw new AppError("Settle up everyone's balance before archiving this group.", "CONFLICT");
+  }
+  await db.group.update({ where: { id: groupId }, data: { archivedAt: new Date() } });
+}
+
+export async function unarchiveGroup(userId: string, groupId: string) {
+  await assertGroupMember(groupId, userId);
+  await db.group.update({ where: { id: groupId }, data: { archivedAt: null } });
+}
+
+/** Throws when a group is archived (it's read-only until unarchived). */
+export async function assertNotArchived(groupId: string) {
+  const g = await db.group.findUnique({ where: { id: groupId }, select: { archivedAt: true } });
+  if (g?.archivedAt) {
+    throw new AppError("This group is archived. Unarchive it in the group's settings to make changes.", "CONFLICT");
+  }
 }
 
 export const CURRENCY_LOCKED = "The currency can't change once the group has expenses or payments.";
@@ -274,7 +312,8 @@ export async function deleteGroup(userId: string, groupId: string) {
 export async function getExpenseContexts(userId: string) {
   const [memberships, friendships, me] = await Promise.all([
     db.groupMember.findMany({
-      where: { userId },
+      // Archived groups are read-only, so they're not offered when adding an expense.
+      where: { userId, group: { archivedAt: null } },
       select: {
         group: {
           select: {

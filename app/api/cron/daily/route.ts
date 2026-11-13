@@ -13,7 +13,7 @@ export const maxDuration = 300;
  * - on Mondays (UTC), sends weekly digests to people who opted in (idempotent per week).
  */
 export async function GET(request: NextRequest) {
-  const secret = process.env.CRON_SECRET;
+  const secret = process.env.CRON_SECRET?.trim();
   const given = request.headers.get("authorization") ?? "";
   // Compare bytes, not string lengths: a non-ASCII header can match in length but not in bytes.
   const a = Buffer.from(given);

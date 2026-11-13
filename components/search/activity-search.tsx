@@ -3,6 +3,7 @@
 import { Search, SlidersHorizontal, X } from "lucide-react";
 import { usePathname, useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
+import { flushSync } from "react-dom";
 import { searchExpensesAction } from "@/app/actions/search";
 import { MonthlyFeed, type FeedItem } from "@/components/activity/feed";
 import { Button } from "@/components/ui/button";
@@ -161,13 +162,17 @@ export function ActivitySearch({
       setMoreError(res.error);
       return;
     }
-    setResults((prev) => {
-      if (!prev || prev.key !== forKey) return prev;
-      const seen = new Set(prev.items.map((i) => i.id));
-      return { ...prev, items: [...prev.items, ...res.data.items.filter((i) => !seen.has(i.id))], page: res.data.page, hasMore: res.data.hasMore };
-    });
+    // Render the new rows now (not on React's next tick), so the first new row exists to take focus.
+    // A deferred focus raced the render on slow devices and lost focus to <body> once Show more unmounted.
+    flushSync(() =>
+      setResults((prev) => {
+        if (!prev || prev.key !== forKey) return prev;
+        const seen = new Set(prev.items.map((i) => i.id));
+        return { ...prev, items: [...prev.items, ...res.data.items.filter((i) => !seen.has(i.id))], page: res.data.page, hasMore: res.data.hasMore };
+      }),
+    );
     // Move focus to the first new row, so keyboard users continue where the list grew.
-    requestAnimationFrame(() => listRef.current?.querySelectorAll<HTMLElement>("a[href]")[shown]?.focus());
+    listRef.current?.querySelectorAll<HTMLElement>("a[href]")[shown]?.focus();
   }
 
   const typing = (typedQuery(query) ?? "") !== (filters.q ?? "");
